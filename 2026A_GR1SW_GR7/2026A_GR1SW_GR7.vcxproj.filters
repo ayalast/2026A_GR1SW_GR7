@@ -1,0 +1,91 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="Archivos de origen">
+      <UniqueIdentifier>{4FC737F1-C7A5-4376-A066-2A32D752A2FF}</UniqueIdentifier>
+      <Extensions>cpp;c;cc;cxx;c++;cppm;ixx;def;odl;idl;hpj;bat;asm;asmx</Extensions>
+    </Filter>
+    <Filter Include="Archivos de encabezado">
+      <UniqueIdentifier>{93995380-89BD-4b04-88EB-625FBE52EBFB}</UniqueIdentifier>
+      <Extensions>h;hh;hpp;hxx;h++;hm;inl;inc;ipp;xsd</Extensions>
+    </Filter>
+    <Filter Include="Archivos de recursos">
+      <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
+      <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
+    </Filter>
+    <Filter Include="Archivos de origen\shaders">
+      <UniqueIdentifier>{0a7d26b1-bbb7-4c2d-bd20-a889ac9612a3}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Archivos de origen\textures">
+      <UniqueIdentifier>{5cdd45e8-f311-4112-a045-f0abc6f9341e}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Archivos de origen\models">
+      <UniqueIdentifier>{ab9698a0-20a4-4955-ad92-4ccdbbe4c6ef}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Archivos de origen\src">
+      <UniqueIdentifier>{fe9ed128-a48d-4b8e-89b3-596e05f76901}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Archivos de origen\models\backrooms_level_0">
+      <UniqueIdentifier>{8e48f201-adb6-44d6-892b-1c36685e7463}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Archivos de origen\models\backrooms_level_0\textures">
+      <UniqueIdentifier>{d46a5d42-9553-42fc-8f68-333e227d8298}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="src\main.cpp">
+      <Filter>Archivos de origen\src</Filter>
+    </ClCompile>
+    <ClCompile Include="Dependencias\Library\glad.c">
+      <Filter>Archivos de origen\src</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="backrooms.vs">
+      <Filter>Archivos de origen\shaders</Filter>
+    </None>
+    <None Include="backrooms.fs">
+      <Filter>Archivos de origen\shaders</Filter>
+    </None>
+    <None Include="basico.fs">
+      <Filter>Archivos de origen\shaders</Filter>
+    </None>
+    <None Include="basico.vs">
+      <Filter>Archivos de origen\shaders</Filter>
+    </None>
+    <None Include="models\backrooms_level_0\scene.bin">
+      <Filter>Archivos de origen\models\backrooms_level_0</Filter>
+    </None>
+    <None Include="models\backrooms_level_0\scene.gltf">
+      <Filter>Archivos de origen\models\backrooms_level_0</Filter>
+    </None>
+  </ItemGroup>
+  <ItemGroup>
+    <Text Include="models\backrooms_level_0\license.txt">
+      <Filter>Archivos de origen\models\backrooms_level_0</Filter>
+    </Text>
+  </ItemGroup>
+  <ItemGroup>
+    <Image Include="models\backrooms_level_0\textures\Material.001_baseColor.png">
+      <Filter>Archivos de origen\models\backrooms_level_0\textures</Filter>
+    </Image>
+    <Image Include="models\backrooms_level_0\textures\Material.001_normal.jpeg">
+      <Filter>Archivos de origen\models\backrooms_level_0\textures</Filter>
+    </Image>
+    <Image Include="models\backrooms_level_0\textures\Material.005_baseColor.png">
+      <Filter>Archivos de origen\models\backrooms_level_0\textures</Filter>
+    </Image>
+    <Image Include="models\backrooms_level_0\textures\Material.005_emissive.png">
+      <Filter>Archivos de origen\models\backrooms_level_0\textures</Filter>
+    </Image>
+    <Image Include="models\backrooms_level_0\textures\Material.005_normal.png">
+      <Filter>Archivos de origen\models\backrooms_level_0\textures</Filter>
+    </Image>
+    <Image Include="models\backrooms_level_0\textures\Material_baseColor.jpeg">
+      <Filter>Archivos de origen\models\backrooms_level_0\textures</Filter>
+    </Image>
+    <Image Include="models\backrooms_level_0\textures\Material_normal.png">
+      <Filter>Archivos de origen\models\backrooms_level_0\textures</Filter>
+    </Image>
+  </ItemGroup>
+</Project>
