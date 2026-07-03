@@ -149,24 +149,25 @@
     <ClCompile Include="src\main.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <None Include="backrooms.fs" />
-    <None Include="backrooms.vs" />
-    <None Include="basico.fs" />
-    <None Include="basico.vs" />
+    <None Include="models\backrooms_level_0\backrooms.mtl" />
     <None Include="models\backrooms_level_0\scene.bin" />
     <None Include="models\backrooms_level_0\scene.gltf" />
+    <None Include="shaders\backrooms.fs" />
+    <None Include="shaders\backrooms.vs" />
+    <None Include="shaders\basico.fs" />
+    <None Include="shaders\basico.vs" />
   </ItemGroup>
   <ItemGroup>
     <Text Include="models\backrooms_level_0\license.txt" />
   </ItemGroup>
   <ItemGroup>
-    <Image Include="models\backrooms_level_0\textures\Material.001_baseColor.png" />
-    <Image Include="models\backrooms_level_0\textures\Material.001_normal.jpeg" />
-    <Image Include="models\backrooms_level_0\textures\Material.005_baseColor.png" />
-    <Image Include="models\backrooms_level_0\textures\Material.005_emissive.png" />
-    <Image Include="models\backrooms_level_0\textures\Material.005_normal.png" />
-    <Image Include="models\backrooms_level_0\textures\Material_baseColor.jpeg" />
-    <Image Include="models\backrooms_level_0\textures\Material_normal.png" />
+    <Image Include="models\backrooms_level_0\Material.001_baseColor.png" />
+    <Image Include="models\backrooms_level_0\Material.001_normal.jpeg" />
+    <Image Include="models\backrooms_level_0\Material.005_baseColor.png" />
+    <Image Include="models\backrooms_level_0\Material.005_emissive.png" />
+    <Image Include="models\backrooms_level_0\Material.005_normal.png" />
+    <Image Include="models\backrooms_level_0\Material_baseColor.jpeg" />
+    <Image Include="models\backrooms_level_0\Material_normal.png" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
