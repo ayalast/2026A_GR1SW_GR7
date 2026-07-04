@@ -152,6 +152,7 @@
     <None Include="models\backrooms_level_0\backrooms.mtl" />
     <None Include="models\backrooms_level_0\scene.bin" />
     <None Include="models\backrooms_level_0\scene.gltf" />
+    <None Include="models\backrooms_level_0_collisions\backrooms.mtl" />
     <None Include="shaders\backrooms.fs" />
     <None Include="shaders\backrooms.vs" />
     <None Include="shaders\basico.fs" />
@@ -159,6 +160,7 @@
   </ItemGroup>
   <ItemGroup>
     <Text Include="models\backrooms_level_0\license.txt" />
+    <Text Include="models\backrooms_level_0_collisions\license.txt" />
   </ItemGroup>
   <ItemGroup>
     <Image Include="models\backrooms_level_0\Material.001_baseColor.png" />

@@ -70,15 +70,18 @@ public:
     void ProcessKeyboard(Camera_Movement direction, float deltaTime)
     {
         float velocity = MovementSpeed * deltaTime;
+        glm::vec3 XZFront(Front.x, 0.0f, Front.z);
+        glm::vec3 XZRight(Right.x, 0.0f, Right.z);
+
         if (direction == FORWARD)
-            Position += Front * velocity;
+            Position += XZFront * velocity;
         
         if (direction == BACKWARD)
-            Position -= Front * velocity;
+            Position -= XZFront * velocity;
         if (direction == LEFT)
-            Position -= Right * velocity;
+            Position -= XZRight * velocity;
         if (direction == RIGHT)
-            Position += Right * velocity;
+            Position += XZRight * velocity;
         
     }
 

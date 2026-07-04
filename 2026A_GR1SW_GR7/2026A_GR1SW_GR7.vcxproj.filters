@@ -28,6 +28,9 @@
     <Filter Include="Archivos de origen\models\backrooms_level_0">
       <UniqueIdentifier>{8e48f201-adb6-44d6-892b-1c36685e7463}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Archivos de origen\models\backrooms_level_0_collisions">
+      <UniqueIdentifier>{ad33ebb0-f31f-4b52-b5cc-f1bb66ad3e73}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="src\main.cpp">
@@ -59,10 +62,16 @@
     <None Include="models\backrooms_level_0\backrooms.mtl">
       <Filter>Archivos de origen\models\backrooms_level_0</Filter>
     </None>
+    <None Include="models\backrooms_level_0_collisions\backrooms.mtl">
+      <Filter>Archivos de origen\models\backrooms_level_0_collisions</Filter>
+    </None>
   </ItemGroup>
   <ItemGroup>
     <Text Include="models\backrooms_level_0\license.txt">
       <Filter>Archivos de origen\models\backrooms_level_0</Filter>
+    </Text>
+    <Text Include="models\backrooms_level_0_collisions\license.txt">
+      <Filter>Archivos de origen\models\backrooms_level_0_collisions</Filter>
     </Text>
   </ItemGroup>
   <ItemGroup>

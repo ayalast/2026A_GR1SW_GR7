@@ -11,6 +11,7 @@
 #include <shader.h>
 #include <camera.h>
 #include <model.h>
+#include <collisions.h>
 
 #define STB_IMAGE_IMPLEMENTATION 
 #include <stb_image.h>
@@ -34,7 +35,10 @@ bool firstMouse = true;
 float deltaTime = 0.0f;
 float lastFrame = 0.0f;
 
-//Holaaa
+//posicion
+glm::vec3 backroomsPos(0.0f, -3.0f, 0.0f);
+
+CollisionManager colManager;
 
 int main() {
     // 1. Inicializar GLFW
@@ -77,10 +81,16 @@ int main() {
     // 6. Cargar modelos
 
     Model backroomsModel("models/backrooms_level_0/backrooms.obj");
+    Model backroomsCollisionsModel("models/backrooms_level_0_collisions/backrooms.obj");
+    std::cout << "Meshes: " << backroomsCollisionsModel.meshes.size() << std::endl;
 
     camera.MovementSpeed = 10;
 
-    // 7. Bucle de Renderizado
+    // 7. Colisiones
+
+    colManager.addStaticBox(backroomsCollisionsModel, backroomsPos);
+
+    // 8. Bucle de Renderizado
     while (!glfwWindowShouldClose(window)) {
         
         float currentFrame = glfwGetTime();
@@ -103,15 +113,23 @@ int main() {
 
         // dibujar el modelo de backrooms
         glm::mat4 model = glm::mat4(1.0f);
-        model = glm::translate(model, glm::vec3(0.0f, -1.0f, 0.0f));
+        model = glm::translate(model, backroomsPos);
         backroomsShader.setMat4("model", model);
         backroomsModel.Draw(backroomsShader);
+
+        // mostrar cajas de colision
+        //cubeShader.use();
+        //cubeShader.setMat4("projection", projection);
+        //cubeShader.setMat4("view", view);
+        //cubeShader.setVec3("cubeColor", glm::vec3(1.0f, 0.0f, 0.0f));
+
+        //colManager.drawCollisionBoxes(cubeShader);
 
         glfwSwapBuffers(window);
         glfwPollEvents();
     }
 
-    // 8. Limpiar memoria
+    // 9. Limpiar memoria
     glfwTerminate();
 
     return 0;
@@ -124,6 +142,8 @@ void processInput(GLFWwindow* window)
     if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
         glfwSetWindowShouldClose(window, true);
 
+    glm::vec3 oldPosition = camera.Position;
+
     if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
         camera.ProcessKeyboard(FORWARD, deltaTime);
     if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
@@ -132,6 +152,10 @@ void processInput(GLFWwindow* window)
         camera.ProcessKeyboard(LEFT, deltaTime);
     if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
         camera.ProcessKeyboard(RIGHT, deltaTime);
+
+    if (colManager.checkCameraCollision(camera.Position, 0.5f)) {
+        camera.Position = oldPosition;
+    }
 }
 
 // glfw: whenever the window size changed (by OS or user resize) this callback function executes
