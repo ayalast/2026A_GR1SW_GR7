@@ -3,7 +3,6 @@ x64/
 Debug/
 Release/
 *.exe
-*.obj
 *.pdb
 *.idb
 *.ilk
