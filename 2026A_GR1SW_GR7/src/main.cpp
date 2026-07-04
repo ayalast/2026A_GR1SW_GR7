@@ -145,17 +145,13 @@ void processInput(GLFWwindow* window)
     glm::vec3 oldPosition = camera.Position;
 
     if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
-        camera.ProcessKeyboard(FORWARD, deltaTime);
+        camera.ProcessKeyboard(FORWARD, deltaTime, colManager);
     if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
-        camera.ProcessKeyboard(BACKWARD, deltaTime);
+        camera.ProcessKeyboard(BACKWARD, deltaTime, colManager);
     if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS)
-        camera.ProcessKeyboard(LEFT, deltaTime);
+        camera.ProcessKeyboard(LEFT, deltaTime, colManager);
     if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
-        camera.ProcessKeyboard(RIGHT, deltaTime);
-
-    if (colManager.checkCameraCollision(camera.Position, 0.5f)) {
-        camera.Position = oldPosition;
-    }
+        camera.ProcessKeyboard(RIGHT, deltaTime, colManager);
 }
 
 // glfw: whenever the window size changed (by OS or user resize) this callback function executes

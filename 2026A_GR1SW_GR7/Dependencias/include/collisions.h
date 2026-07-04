@@ -61,17 +61,89 @@ public:
         }
     }
 
-    bool checkCameraCollision(glm::vec3 position, float radius)
+    //Comprobar colision esferica con caja de colision
+    bool sphereIntersects(AABB box, glm::vec3 position, float radius)
     {
-        for (const AABB& box : this->boxes)
-        {
-            glm::vec3 closest = glm::clamp(position, box.min, box.max);
-            glm::vec3 distance = position - closest;
+        glm::vec3 closest = glm::clamp(position, box.min, box.max);
+        glm::vec3 distance = position - closest;
 
-            if (glm::dot(distance, distance) < radius * radius) return true;
+        return glm::dot(distance, distance) < radius * radius;
+    }
+
+    glm::vec3 getCollisionNormal(const AABB& box, glm::vec3 position)
+    {
+        glm::vec3 closest = glm::clamp(position, box.min, box.max);
+        glm::vec3 delta = position - closest;
+        float dist2 = glm::dot(delta, delta);
+
+        // Sphere center is outside the box (edge/corner collision)
+        if (dist2 > 0.000001f)
+            return glm::normalize(delta);
+
+        // Sphere center is inside the box
+        float left = position.x - box.min.x;
+        float right = box.max.x - position.x;
+        float bottom = position.y - box.min.y;
+        float top = box.max.y - position.y;
+        float back = position.z - box.min.z;
+        float front = box.max.z - position.z;
+
+        float minDist = left;
+        glm::vec3 normal(-1, 0, 0);
+
+        if (right < minDist)
+        {
+            minDist = right;
+            normal = glm::vec3(1, 0, 0);
         }
 
-        return false;
+        if (bottom < minDist)
+        {
+            minDist = bottom;
+            normal = glm::vec3(0, -1, 0);
+        }
+
+        if (top < minDist)
+        {
+            minDist = top;
+            normal = glm::vec3(0, 1, 0);
+        }
+
+        if (back < minDist)
+        {
+            minDist = back;
+            normal = glm::vec3(0, 0, -1);
+        }
+
+        if (front < minDist)
+        {
+            normal = glm::vec3(0, 0, 1);
+        }
+
+        return normal;
+    }
+
+    glm::vec3 correctMovement(glm::vec3 position,glm::vec3 movement, float radius)
+    {
+        glm::vec3 corrected = movement;
+
+        for (const AABB& box : boxes)
+        {
+            glm::vec3 newPos = position + corrected;
+
+            if (!sphereIntersects(box, newPos, radius))
+                continue;
+
+            glm::vec3 normal = getCollisionNormal(box, newPos);
+
+            float intoWall = glm::dot(corrected, normal);
+
+            // Only remove movement into the wall
+            if (intoWall < 0.0f)
+                corrected -= intoWall * normal;
+        }
+
+        return corrected;
     }
 
     void drawCollisionBoxes(Shader& shader)

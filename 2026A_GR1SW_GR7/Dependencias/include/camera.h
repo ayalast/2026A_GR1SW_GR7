@@ -5,6 +5,8 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 
+#include <collisions.h>
+
 #include <vector>
 
 // Defines several possible options for camera movement. Used as abstraction to stay away from window-system specific input methods
@@ -21,6 +23,7 @@ const float PITCH       =  0.0f;
 const float SPEED       =  2.5f;
 const float SENSITIVITY =  0.1f;
 const float ZOOM        =  45.0f;
+const float RADIUS = 1.0f;
 
 
 // An abstract camera class that processes input and calculates the corresponding Euler Angles, Vectors and Matrices for use in OpenGL
@@ -67,22 +70,25 @@ public:
     }
 
     // processes input received from any keyboard-like input system. Accepts input parameter in the form of camera defined ENUM (to abstract it from windowing systems)
-    void ProcessKeyboard(Camera_Movement direction, float deltaTime)
+    void ProcessKeyboard(Camera_Movement direction, float deltaTime, CollisionManager colManager)
     {
         float velocity = MovementSpeed * deltaTime;
         glm::vec3 XZFront(Front.x, 0.0f, Front.z);
         glm::vec3 XZRight(Right.x, 0.0f, Right.z);
+        glm::vec3 movement(0.0f);
 
         if (direction == FORWARD)
-            Position += XZFront * velocity;
+            movement += XZFront * velocity;
         
         if (direction == BACKWARD)
-            Position -= XZFront * velocity;
+            movement -= XZFront * velocity;
         if (direction == LEFT)
-            Position -= XZRight * velocity;
+            movement -= XZRight * velocity;
         if (direction == RIGHT)
-            Position += XZRight * velocity;
+            movement += XZRight * velocity;
         
+        movement = colManager.correctMovement(Position, movement, RADIUS);
+        Position += movement;
     }
 
     // processes input received from a mouse input system. Expects the offset value in both the x and y direction.
