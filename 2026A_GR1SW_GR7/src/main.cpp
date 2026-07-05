@@ -37,6 +37,9 @@ float lastFrame = 0.0f;
 
 //posicion
 glm::vec3 backroomsPos(0.0f, -3.0f, 0.0f);
+glm::vec3 surveillanceCameraPos(3.5f, -1.6f, 2.0f);
+float surveillanceCameraYawDeg = 180.0f;
+glm::vec3 surveillanceCameraScale(0.35f, 0.35f, 0.35f);
 
 CollisionManager colManager;
 
@@ -82,6 +85,7 @@ int main() {
 
     Model backroomsModel("models/backrooms_level_0/backrooms.obj");
     Model backroomsCollisionsModel("models/backrooms_level_0_collisions/backrooms.obj");
+    Model surveillanceCameraModel("models/surveillance_camera/scene.gltf");
     std::cout << "Meshes: " << backroomsCollisionsModel.meshes.size() << std::endl;
 
     camera.MovementSpeed = 10;
@@ -89,6 +93,7 @@ int main() {
     // 7. Colisiones
 
     colManager.addStaticBox(backroomsCollisionsModel, backroomsPos);
+    colManager.addStaticBox(surveillanceCameraModel, surveillanceCameraPos);
 
     // 8. Bucle de Renderizado
     while (!glfwWindowShouldClose(window)) {
@@ -116,6 +121,14 @@ int main() {
         model = glm::translate(model, backroomsPos);
         backroomsShader.setMat4("model", model);
         backroomsModel.Draw(backroomsShader);
+
+        // dibujar modelo secundario: camara de vigilancia
+        glm::mat4 surveillanceModel = glm::mat4(1.0f);
+        surveillanceModel = glm::translate(surveillanceModel, surveillanceCameraPos);
+        surveillanceModel = glm::rotate(surveillanceModel, glm::radians(surveillanceCameraYawDeg), glm::vec3(0.0f, 1.0f, 0.0f));
+        surveillanceModel = glm::scale(surveillanceModel, surveillanceCameraScale);
+        backroomsShader.setMat4("model", surveillanceModel);
+        surveillanceCameraModel.Draw(backroomsShader);
 
         // mostrar cajas de colision
         //cubeShader.use();
