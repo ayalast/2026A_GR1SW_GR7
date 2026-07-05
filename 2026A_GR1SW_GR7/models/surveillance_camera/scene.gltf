@@ -1363,121 +1363,121 @@
   ],
   "images": [
     {
-      "uri": "textures/Cam_Body_baseColor.png"
+      "uri": "Cam_Body_baseColor.png"
     },
     {
-      "uri": "textures/Cam_Body_metallicRoughness.png"
+      "uri": "Cam_Body_metallicRoughness.png"
     },
     {
-      "uri": "textures/Cam_Body_emissive.png"
+      "uri": "Cam_Body_emissive.png"
     },
     {
-      "uri": "textures/Cam_Body_normal.png"
+      "uri": "Cam_Body_normal.png"
     },
     {
-      "uri": "textures/Cam_FrontBack_baseColor.png"
+      "uri": "Cam_FrontBack_baseColor.png"
     },
     {
-      "uri": "textures/Cam_FrontBack_metallicRoughness.png"
+      "uri": "Cam_FrontBack_metallicRoughness.png"
     },
     {
-      "uri": "textures/Cam_FrontBack_emissive.png"
+      "uri": "Cam_FrontBack_emissive.png"
     },
     {
-      "uri": "textures/Cam_FrontBack_normal.png"
+      "uri": "Cam_FrontBack_normal.png"
     },
     {
-      "uri": "textures/Glass_baseColor.png"
+      "uri": "Glass_baseColor.png"
     },
     {
-      "uri": "textures/Glass_metallicRoughness.png"
+      "uri": "Glass_metallicRoughness.png"
     },
     {
-      "uri": "textures/Glass_emissive.png"
+      "uri": "Glass_emissive.png"
     },
     {
-      "uri": "textures/Cam_Attachments_baseColor.png"
+      "uri": "Cam_Attachments_baseColor.png"
     },
     {
-      "uri": "textures/Cam_Attachments_metallicRoughness.png"
+      "uri": "Cam_Attachments_metallicRoughness.png"
     },
     {
-      "uri": "textures/Cam_Attachments_emissive.png"
+      "uri": "Cam_Attachments_emissive.png"
     },
     {
-      "uri": "textures/Cam_Attachments_normal.png"
+      "uri": "Cam_Attachments_normal.png"
     },
     {
-      "uri": "textures/Bolts_baseColor.png"
+      "uri": "Bolts_baseColor.png"
     },
     {
-      "uri": "textures/Bolts_metallicRoughness.png"
+      "uri": "Bolts_metallicRoughness.png"
     },
     {
-      "uri": "textures/Bolts_emissive.png"
+      "uri": "Bolts_emissive.png"
     },
     {
-      "uri": "textures/Bolts_normal.png"
+      "uri": "Bolts_normal.png"
     },
     {
-      "uri": "textures/Cam_Cover_baseColor.png"
+      "uri": "Cam_Cover_baseColor.png"
     },
     {
-      "uri": "textures/Cam_Cover_metallicRoughness.png"
+      "uri": "Cam_Cover_metallicRoughness.png"
     },
     {
-      "uri": "textures/Cam_Cover_emissive.png"
+      "uri": "Cam_Cover_emissive.png"
     },
     {
-      "uri": "textures/Cam_Cover_normal.png"
+      "uri": "Cam_Cover_normal.png"
     },
     {
-      "uri": "textures/WallAttach_baseColor.png"
+      "uri": "WallAttach_baseColor.png"
     },
     {
-      "uri": "textures/WallAttach_metallicRoughness.png"
+      "uri": "WallAttach_metallicRoughness.png"
     },
     {
-      "uri": "textures/WallAttach_emissive.png"
+      "uri": "WallAttach_emissive.png"
     },
     {
-      "uri": "textures/WallAttach_normal.png"
+      "uri": "WallAttach_normal.png"
     },
     {
-      "uri": "textures/Cord_baseColor.png"
+      "uri": "Cord_baseColor.png"
     },
     {
-      "uri": "textures/Cord_metallicRoughness.png"
+      "uri": "Cord_metallicRoughness.png"
     },
     {
-      "uri": "textures/Cord_emissive.png"
+      "uri": "Cord_emissive.png"
     },
     {
-      "uri": "textures/Cord_normal.png"
+      "uri": "Cord_normal.png"
     },
     {
-      "uri": "textures/material_baseColor.png"
+      "uri": "material_baseColor.png"
     },
     {
-      "uri": "textures/material_metallicRoughness.png"
+      "uri": "material_metallicRoughness.png"
     },
     {
-      "uri": "textures/material_emissive.png"
+      "uri": "material_emissive.png"
     },
     {
-      "uri": "textures/material_normal.png"
+      "uri": "material_normal.png"
     },
     {
-      "uri": "textures/Wall_baseColor.png"
+      "uri": "Wall_baseColor.png"
     },
     {
-      "uri": "textures/Wall_metallicRoughness.png"
+      "uri": "Wall_metallicRoughness.png"
     },
     {
-      "uri": "textures/Wall_emissive.png"
+      "uri": "Wall_emissive.png"
     },
     {
-      "uri": "textures/Wall_normal.png"
+      "uri": "Wall_normal.png"
     }
   ],
   "materials": [

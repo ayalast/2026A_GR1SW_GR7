@@ -1,0 +1,11 @@
+Model Information:
+* title:	Office Furniture
+* source:	https://sketchfab.com/3d-models/office-furniture-f9c0edf8861f4051b40d23f9a9c48754
+* author:	aruspice (https://sketchfab.com/vtomioka)
+
+Model License:
+* license type:	CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
+* requirements:	Author must be credited. Commercial use is allowed.
+
+If you use this 3D model in your project be sure to copy paste this credit wherever you share it:
+This work is based on "Office Furniture" (https://sketchfab.com/3d-models/office-furniture-f9c0edf8861f4051b40d23f9a9c48754) by aruspice (https://sketchfab.com/vtomioka) licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
