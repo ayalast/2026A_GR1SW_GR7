@@ -204,6 +204,30 @@ AABB computeModelBounds(const Model& model)
     return bounds;
 }
 
+AABB computeMeshBounds(const Mesh& mesh)
+{
+    AABB bounds;
+    bounds.min = glm::vec3(FLT_MAX, FLT_MAX, FLT_MAX);
+    bounds.max = glm::vec3(-FLT_MAX, -FLT_MAX, -FLT_MAX);
+
+    for (const Vertex& vertex : mesh.vertices)
+    {
+        bounds.min = glm::min(bounds.min, vertex.Position);
+        bounds.max = glm::max(bounds.max, vertex.Position);
+    }
+
+    return bounds;
+}
+
+AABB computeOldPaperBoxesBounds(const Model& model)
+{
+    if (model.meshes.empty())
+        return computeModelBounds(model);
+
+    // En este asset, el mesh 0 es cajas; el mesh 1 es decal de papeles del piso.
+    return computeMeshBounds(model.meshes[0]);
+}
+
 AABB buildScaledBounds(const AABB& localBounds, const glm::vec3& worldPosition, const glm::vec3& scale)
 {
     AABB worldBounds;
@@ -228,7 +252,7 @@ std::vector<FurnitureInstance> createOfficeFurnitureInstances(const AABB& localB
     std::vector<glm::vec3> anchorPositions =
     {
         // Distribuidos en zonas separadas del mapa para que no aparezcan juntos.
-        glm::vec3(6.0f, 0.0f, -8.0f),
+        glm::vec3(50.0f, 0.0f, -5.0f),
         glm::vec3(-14.0f, 0.0f, -22.0f),
         glm::vec3(16.0f, 0.0f, -34.0f)
     };
@@ -243,6 +267,37 @@ std::vector<FurnitureInstance> createOfficeFurnitureInstances(const AABB& localB
         instance.position = glm::vec3(
             anchor.x,
             floorY - (localBounds.min.y * furnitureScale),
+            anchor.z
+        );
+
+        instances.push_back(instance);
+    }
+
+    return instances;
+}
+
+std::vector<FurnitureInstance> createOldPaperBoxesInstances(const AABB& localBounds, const glm::vec3& floorOffset)
+{
+    const float boxesScale = 2.2f;
+    const float floorY = floorOffset.y;
+
+    std::vector<glm::vec3> anchorPositions =
+    {
+        glm::vec3(1.0f, 0.0f, -12.0f),
+        glm::vec3(12.0f, 0.0f, -40.0f),
+        glm::vec3(-30.0f, 0.0f, -30.0f)
+    };
+
+    std::vector<FurnitureInstance> instances;
+    instances.reserve(anchorPositions.size());
+
+    for (const glm::vec3& anchor : anchorPositions)
+    {
+        FurnitureInstance instance{};
+        instance.scale = glm::vec3(boxesScale);
+        instance.position = glm::vec3(
+            anchor.x,
+            floorY - (localBounds.min.y * boxesScale),
             anchor.z
         );
 
@@ -267,6 +322,24 @@ void drawCameraInstances(
         surveillanceModel = glm::scale(surveillanceModel, cameraScale);
         shader.setMat4("model", surveillanceModel);
         cameraModel.Draw(shader);
+    }
+}
+
+void drawOldPaperBoxesInstances(
+    Shader& shader,
+    Model& boxesModel,
+    const std::vector<FurnitureInstance>& instances)
+{
+    if (boxesModel.meshes.empty())
+        return;
+
+    for (const FurnitureInstance& instance : instances)
+    {
+        glm::mat4 boxesModelMatrix = buildFurnitureModelMatrix(instance);
+        shader.setMat4("model", boxesModelMatrix);
+
+        // Solo dibuja la malla de cajas para evitar el piso negro del decal.
+        boxesModel.meshes[0].Draw(shader);
     }
 }
 
@@ -313,6 +386,7 @@ int main() {
     Model backroomsCollisionsModel("models/backrooms_level_0_collisions/backrooms.obj");
     Model surveillanceCameraModel("models/surveillance_camera/scene.gltf");
     Model officeFurnitureModel("models/office_furniture/scene.gltf");
+    Model oldPaperBoxesModel("models/old_paper__cardboard_boxes/scene.gltf");
     std::cout << "Meshes: " << backroomsCollisionsModel.meshes.size() << std::endl;
 
     CameraPlacementConfig cameraCfg;
@@ -321,6 +395,8 @@ int main() {
 
     const AABB officeFurnitureBounds = computeModelBounds(officeFurnitureModel);
     const std::vector<FurnitureInstance> officeFurnitureInstances = createOfficeFurnitureInstances(officeFurnitureBounds, backroomsPos);
+    const AABB oldPaperBoxesBounds = computeOldPaperBoxesBounds(oldPaperBoxesModel);
+    const std::vector<FurnitureInstance> oldPaperBoxesInstances = createOldPaperBoxesInstances(oldPaperBoxesBounds, backroomsPos);
 
     std::cout << "Camaras colocadas: " << surveillanceInstances.size() << std::endl;
 
@@ -333,6 +409,10 @@ int main() {
     for (const FurnitureInstance& instance : officeFurnitureInstances)
     {
         colManager.addStaticBox(buildScaledBounds(officeFurnitureBounds, instance.position, instance.scale));
+    }
+    for (const FurnitureInstance& instance : oldPaperBoxesInstances)
+    {
+        colManager.addStaticBox(buildScaledBounds(oldPaperBoxesBounds, instance.position, instance.scale));
     }
 
     // 8. Bucle de Renderizado
@@ -372,6 +452,9 @@ int main() {
             backroomsShader.setMat4("model", furnitureModel);
             officeFurnitureModel.Draw(backroomsShader);
         }
+
+        // dibujar 3 modelos de old paper/cardboard boxes (sin decal de piso)
+        drawOldPaperBoxesInstances(backroomsShader, oldPaperBoxesModel, oldPaperBoxesInstances);
 
         glfwSwapBuffers(window);
         glfwPollEvents();
