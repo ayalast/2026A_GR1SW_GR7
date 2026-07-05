@@ -1,6 +1,7 @@
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
 #include <iostream>
+#include <vector>
 
 // Incluimos Assimp SOLO para probar que el vinculador (Linker) no dé errores.
 // Si esto compila, significa que configuraste bien tu .lib en las Propiedades.
@@ -37,9 +38,35 @@ float lastFrame = 0.0f;
 
 //posicion
 glm::vec3 backroomsPos(0.0f, -3.0f, 0.0f);
-glm::vec3 surveillanceCameraPos(3.5f, -1.6f, 2.0f);
-float surveillanceCameraYawDeg = 180.0f;
-glm::vec3 surveillanceCameraScale(0.35f, 0.35f, 0.35f);
+
+struct StaticCameraPlacement {
+    glm::vec3 position;
+    float yawDeg;
+    glm::vec3 scale;
+};
+
+std::vector<StaticCameraPlacement> surveillancePlacements = {
+    {{  3.5f, -1.6f,   2.0f}, 180.0f, {0.35f, 0.35f, 0.35f}},
+    {{  8.0f, -1.6f,   4.0f}, 180.0f, {0.35f, 0.35f, 0.35f}},
+    {{ 12.0f, -1.6f,   6.0f}, 180.0f, {0.35f, 0.35f, 0.35f}},
+    {{ -4.0f, -1.6f,   5.5f},   0.0f, {0.35f, 0.35f, 0.35f}},
+    {{ -8.0f, -1.6f,   8.0f},   0.0f, {0.35f, 0.35f, 0.35f}},
+    {{-12.5f, -1.6f,  10.0f},   0.0f, {0.35f, 0.35f, 0.35f}},
+    {{  5.0f, -1.6f,  -3.0f},  90.0f, {0.35f, 0.35f, 0.35f}},
+    {{  9.0f, -1.6f,  -7.0f},  90.0f, {0.35f, 0.35f, 0.35f}},
+    {{ 13.0f, -1.6f, -11.0f},  90.0f, {0.35f, 0.35f, 0.35f}},
+    {{ -5.0f, -1.6f,  -3.0f}, -90.0f, {0.35f, 0.35f, 0.35f}},
+    {{ -9.0f, -1.6f,  -7.0f}, -90.0f, {0.35f, 0.35f, 0.35f}},
+    {{-13.0f, -1.6f, -11.0f}, -90.0f, {0.35f, 0.35f, 0.35f}},
+    {{  2.0f, -1.6f,  12.0f}, 180.0f, {0.35f, 0.35f, 0.35f}},
+    {{  6.0f, -1.6f,  14.0f}, 180.0f, {0.35f, 0.35f, 0.35f}},
+    {{ 10.0f, -1.6f,  16.0f}, 180.0f, {0.35f, 0.35f, 0.35f}},
+    {{ -2.0f, -1.6f,  12.0f},   0.0f, {0.35f, 0.35f, 0.35f}},
+    {{ -6.0f, -1.6f,  14.0f},   0.0f, {0.35f, 0.35f, 0.35f}},
+    {{-10.0f, -1.6f,  16.0f},   0.0f, {0.35f, 0.35f, 0.35f}},
+    {{  0.0f, -1.6f, -14.0f},  90.0f, {0.35f, 0.35f, 0.35f}},
+    {{  0.0f, -1.6f,  18.0f}, -90.0f, {0.35f, 0.35f, 0.35f}}
+};
 
 CollisionManager colManager;
 
@@ -93,7 +120,10 @@ int main() {
     // 7. Colisiones
 
     colManager.addStaticBox(backroomsCollisionsModel, backroomsPos);
-    colManager.addStaticBox(surveillanceCameraModel, surveillanceCameraPos);
+    for (const StaticCameraPlacement& placement : surveillancePlacements)
+    {
+        colManager.addStaticBox(surveillanceCameraModel, placement.position);
+    }
 
     // 8. Bucle de Renderizado
     while (!glfwWindowShouldClose(window)) {
@@ -122,13 +152,16 @@ int main() {
         backroomsShader.setMat4("model", model);
         backroomsModel.Draw(backroomsShader);
 
-        // dibujar modelo secundario: camara de vigilancia
-        glm::mat4 surveillanceModel = glm::mat4(1.0f);
-        surveillanceModel = glm::translate(surveillanceModel, surveillanceCameraPos);
-        surveillanceModel = glm::rotate(surveillanceModel, glm::radians(surveillanceCameraYawDeg), glm::vec3(0.0f, 1.0f, 0.0f));
-        surveillanceModel = glm::scale(surveillanceModel, surveillanceCameraScale);
-        backroomsShader.setMat4("model", surveillanceModel);
-        surveillanceCameraModel.Draw(backroomsShader);
+        // dibujar modelos secundarios: camaras de vigilancia clonadas
+        for (const StaticCameraPlacement& placement : surveillancePlacements)
+        {
+            glm::mat4 surveillanceModel = glm::mat4(1.0f);
+            surveillanceModel = glm::translate(surveillanceModel, placement.position);
+            surveillanceModel = glm::rotate(surveillanceModel, glm::radians(placement.yawDeg), glm::vec3(0.0f, 1.0f, 0.0f));
+            surveillanceModel = glm::scale(surveillanceModel, placement.scale);
+            backroomsShader.setMat4("model", surveillanceModel);
+            surveillanceCameraModel.Draw(backroomsShader);
+        }
 
         // mostrar cajas de colision
         //cubeShader.use();
