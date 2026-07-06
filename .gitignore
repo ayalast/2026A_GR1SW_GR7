@@ -6,6 +6,3 @@ Release/
 *.pdb
 *.idb
 *.ilk
-*.obj
-
-!2026A_GR1SW_GR7/2026A_GR1SW_GR7/models/**/*.obj
