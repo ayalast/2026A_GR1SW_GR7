@@ -1,0 +1,66 @@
+# Blender 5.1.2 MTL File: 'None'
+# www.blender.org
+
+newmtl mat_books
+Ns 250.000000
+Ka 1.000000 1.000000 1.000000
+Ks 0.500000 0.500000 0.500000
+Ke 0.000000 0.000000 0.000000
+Ni 1.500000
+d 1.000000
+illum 2
+map_Kd mat_books_baseColor.png
+map_Bump -bm 1.000000 mat_books_normal.png
+
+newmtl mat_cabinets
+Ns 250.000000
+Ka 1.000000 1.000000 1.000000
+Ks 0.500000 0.500000 0.500000
+Ke 0.000000 0.000000 0.000000
+Ni 1.500000
+d 1.000000
+illum 2
+map_Kd mat_cabinets_baseColor.png
+
+newmtl mat_desk_wood
+Ns 250.000000
+Ka 1.000000 1.000000 1.000000
+Ks 0.500000 0.500000 0.500000
+Ke 0.000000 0.000000 0.000000
+Ni 1.500000
+d 1.000000
+illum 2
+map_Kd mat_desk_wood_baseColor.png
+map_Bump -bm 1.000000 mat_desk_wood_normal.png
+
+newmtl mat_lantern_flame
+Ns 43.301277
+Ka 1.000000 1.000000 1.000000
+Ks 0.500000 0.500000 0.500000
+Ni 1.500000
+illum 2
+map_Kd mat_lantern_flame_baseColor.png
+map_Ke mat_lantern_flame_emissive.png
+map_d mat_lantern_flame_baseColor.png
+
+newmtl mat_oillamp_opaque
+Ns 250.000000
+Ka 1.000000 1.000000 1.000000
+Ks 0.500000 0.500000 0.500000
+Ke 0.000000 0.000000 0.000000
+Ni 1.500000
+d 1.000000
+illum 2
+map_Kd mat_oillamp_opaque_baseColor.png
+map_Bump -bm 1.000000 mat_oillamp_opaque_normal.png
+
+newmtl mat_oillamp_transp
+Ns 250.000000
+Ka 1.000000 1.000000 1.000000
+Kd 0.800000 0.800000 0.800000
+Ks 0.500000 0.500000 0.500000
+Ke 0.000000 0.000000 0.000000
+Ni 1.500000
+illum 2
+map_d mat_oillamp_transp_baseColor.png
+map_Bump -bm 1.000000 mat_oillamp_transp_normal.png

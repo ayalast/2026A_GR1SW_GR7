@@ -1,0 +1,46 @@
+# Blender 5.1.2 MTL File: 'None'
+# www.blender.org
+
+newmtl computer
+Ns 250.000000
+Ka 1.000000 1.000000 1.000000
+Ks 0.500000 0.500000 0.500000
+Ni 1.500000
+d 1.000000
+illum 2
+map_Kd computer_baseColor.png
+map_Ke computer_emissive.png
+map_Bump -bm 1.000000 computer_normal.png
+
+newmtl keyboard
+Ns 250.000000
+Ka 1.000000 1.000000 1.000000
+Ks 0.500000 0.500000 0.500000
+Ke 0.000000 0.000000 0.000000
+Ni 1.500000
+d 1.000000
+illum 2
+map_Kd keyboard_baseColor.png
+map_Bump -bm 1.000000 keyboard_normal.png
+
+newmtl keys
+Ns 250.000000
+Ka 1.000000 1.000000 1.000000
+Ks 0.500000 0.500000 0.500000
+Ni 1.500000
+d 1.000000
+illum 2
+map_Kd keys_baseColor.png
+map_Ke keys_emissive.png
+map_Bump -bm 1.000000 keys_normal.png
+
+newmtl screen
+Ns 250.000000
+Ka 1.000000 1.000000 1.000000
+Ks 0.500000 0.500000 0.500000
+Ni 1.500000
+d 1.000000
+illum 2
+map_Kd screen_baseColor.png
+map_Ke screen_emissive.png
+map_Bump -bm 1.000000 screen_normal.png

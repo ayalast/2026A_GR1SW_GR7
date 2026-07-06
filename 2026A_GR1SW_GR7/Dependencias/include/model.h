@@ -46,30 +46,6 @@ public:
     }
     
 private:
-    static glm::mat4 aiMatrixToGlm(const aiMatrix4x4& from)
-    {
-        glm::mat4 to(1.0f);
-
-        to[0][0] = from.a1; to[1][0] = from.a2; to[2][0] = from.a3; to[3][0] = from.a4;
-        to[0][1] = from.b1; to[1][1] = from.b2; to[2][1] = from.b3; to[3][1] = from.b4;
-        to[0][2] = from.c1; to[1][2] = from.c2; to[2][2] = from.c3; to[3][2] = from.c4;
-        to[0][3] = from.d1; to[1][3] = from.d2; to[2][3] = from.d3; to[3][3] = from.d4;
-
-        return to;
-    }
-
-    static glm::vec3 transformPoint(const glm::mat4& transform, const glm::vec3& point)
-    {
-        glm::vec4 result = transform * glm::vec4(point, 1.0f);
-        return glm::vec3(result);
-    }
-
-    static glm::vec3 transformDirection(const glm::mat4& transform, const glm::vec3& direction)
-    {
-        glm::mat3 normalMatrix = glm::transpose(glm::inverse(glm::mat3(transform)));
-        return glm::normalize(normalMatrix * direction);
-    }
-
     // loads a model with supported ASSIMP extensions from file and stores the resulting meshes in the meshes vector.
     void loadModel(string const &path)
     {
@@ -86,38 +62,34 @@ private:
         directory = path.substr(0, path.find_last_of('/'));
 
         // process ASSIMP's root node recursively
-        processNode(scene->mRootNode, scene, glm::mat4(1.0f));
+        processNode(scene->mRootNode, scene);
     }
 
     // processes a node in a recursive fashion. Processes each individual mesh located at the node and repeats this process on its children nodes (if any).
-    void processNode(aiNode *node, const aiScene *scene, const glm::mat4& parentTransform)
+    void processNode(aiNode *node, const aiScene *scene)
     {
-        glm::mat4 nodeTransform = parentTransform * aiMatrixToGlm(node->mTransformation);
-
         // process each mesh located at the current node
         for(unsigned int i = 0; i < node->mNumMeshes; i++)
         {
             // the node object only contains indices to index the actual objects in the scene. 
             // the scene contains all the data, node is just to keep stuff organized (like relations between nodes).
             aiMesh* mesh = scene->mMeshes[node->mMeshes[i]];
-            meshes.push_back(processMesh(mesh, scene, nodeTransform));
+            meshes.push_back(processMesh(mesh, scene));
         }
         // after we've processed all of the meshes (if any) we then recursively process each of the children nodes
         for(unsigned int i = 0; i < node->mNumChildren; i++)
         {
-            processNode(node->mChildren[i], scene, nodeTransform);
+            processNode(node->mChildren[i], scene);
         }
 
     }
 
-    Mesh processMesh(aiMesh *mesh, const aiScene *scene, const glm::mat4& nodeTransform)
+    Mesh processMesh(aiMesh *mesh, const aiScene *scene)
     {
         // data to fill
         vector<Vertex> vertices;
         vector<unsigned int> indices;
         vector<Texture> textures;
-
-        glm::mat3 normalMatrix = glm::transpose(glm::inverse(glm::mat3(nodeTransform)));
 
         // walk through each of the mesh's vertices
         for(unsigned int i = 0; i < mesh->mNumVertices; i++)
@@ -128,14 +100,14 @@ private:
             vector.x = mesh->mVertices[i].x;
             vector.y = mesh->mVertices[i].y;
             vector.z = mesh->mVertices[i].z;
-            vertex.Position = transformPoint(nodeTransform, vector);
+            vertex.Position = vector;
             // normals
             if (mesh->HasNormals())
             {
                 vector.x = mesh->mNormals[i].x;
                 vector.y = mesh->mNormals[i].y;
                 vector.z = mesh->mNormals[i].z;
-                vertex.Normal = glm::normalize(normalMatrix * vector);
+                vertex.Normal = vector;
             }
             // texture coordinates
             if(mesh->mTextureCoords[0]) // does the mesh contain texture coordinates?
@@ -150,12 +122,12 @@ private:
                 vector.x = mesh->mTangents[i].x;
                 vector.y = mesh->mTangents[i].y;
                 vector.z = mesh->mTangents[i].z;
-                vertex.Tangent = glm::normalize(normalMatrix * vector);
+                vertex.Tangent = vector;
                 // bitangent
                 vector.x = mesh->mBitangents[i].x;
                 vector.y = mesh->mBitangents[i].y;
                 vector.z = mesh->mBitangents[i].z;
-                vertex.Bitangent = glm::normalize(normalMatrix * vector);
+                vertex.Bitangent = vector;
             }
             else
                 vertex.TexCoords = glm::vec2(0.0f, 0.0f);
