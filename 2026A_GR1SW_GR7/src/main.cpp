@@ -2,7 +2,7 @@
 #include <GLFW/glfw3.h>
 #include <iostream>
 
-// Incluimos Assimp SOLO para probar que el vinculador (Linker) no de errores.
+// Incluimos Assimp SOLO para probar que el vinculador (Linker) no dé errores.
 // Si esto compila, significa que configuraste bien tu .lib en las Propiedades.
 #include <assimp/Importer.hpp>
 #include <assimp/scene.h>
@@ -27,7 +27,8 @@ void scroll_callback(GLFWwindow* window, double xoffset, double yoffset);
 void processInput(GLFWwindow* window);
 
 // settings
-const unsigned int SCR_WIDTH = 800, SCR_HEIGHT = 600;
+const unsigned int SCR_WIDTH = 800;
+const unsigned int SCR_HEIGHT = 600;
 
 // camera
 Camera camera(glm::vec3(0.0f, 0.0f, 3.0f));
@@ -45,7 +46,7 @@ glm::vec3 surveillanceCameraScale(1.5f, 1.5f, 1.5f);
 
 CollisionManager colManager;
 
-// Instancia de una camara de vigilancia colocada sobre una pared.
+// Estructura para una cámara de vigilancia
 struct CameraInstance
 {
     glm::vec3 position;
@@ -53,7 +54,7 @@ struct CameraInstance
     float pitchDeg;
 };
 
-// Segmento de pared detectado en el modelo de colisiones, usado como "ancla" para pegar props (camaras) a el.
+// Estructura para un segmento de pared detectado
 struct WallAnchor
 {
     glm::vec3 min;
@@ -61,14 +62,14 @@ struct WallAnchor
     bool thinX;
 };
 
-// Instancia generica de mobiliario (posicion + escala uniforme por eje).
+// Estructura para mobiliario genérico
 struct FurnitureInstance
 {
     glm::vec3 position;
     glm::vec3 scale;
 };
 
-// Instancia de un prop montado en pared (con rotacion yaw y escala).
+// Estructura para props montados en pared
 struct WallMountedInstance
 {
     glm::vec3 position;
@@ -76,7 +77,7 @@ struct WallMountedInstance
     glm::vec3 scale;
 };
 
-// Parametros de distribucion procedural para camaras de vigilancia.
+// Configuración para la colocación procedural de cámaras
 struct CameraPlacementConfig
 {
     int targetCount = 200;
@@ -84,16 +85,14 @@ struct CameraPlacementConfig
     float minCamDistance = 6.0f;
     float nearTopMin = 0.80f;
     float nearTopMax = 1.2f;
-    // Pequeno margen para evitar z-fighting con la pared.
-    float wallClearance = 0.02f;
+    float wallClearance = 0.02f; // Margen para evitar z-fighting
     float pitchDownMin = -28.0f;
     float pitchDownMax = -12.0f;
     float yawJitterMin = -10.0f;
     float yawJitterMax = 10.0f;
 };
 
-//  CALCULO DE BOUNDS (AABB)
-// Calcula el AABB (min/max) de TODOS los meshes de un modelo, en espacio local.
+// Función para calcular el AABB de todos los meshes de un modelo
 AABB computeModelBounds(const Model& model)
 {
     AABB bounds;
@@ -112,7 +111,7 @@ AABB computeModelBounds(const Model& model)
     return bounds;
 }
 
-// Calcula el AABB de un unico mesh, en espacio local.
+// Función para calcular el AABB de un solo mesh
 AABB computeMeshBounds(const Mesh& mesh)
 {
     AABB bounds;
@@ -128,19 +127,15 @@ AABB computeMeshBounds(const Mesh& mesh)
     return bounds;
 }
 
-// Bounds especificos para el modelo de cajas de carton/papel viejo.
-// En este asset, el mesh 0 es cajas; el mesh 1 es decal de papeles del piso.
-// Por eso solo se toma el mesh 0 para no incluir el decal en el AABB.
+// Calcula los bounds específicos para el modelo de cajas de cartón
 AABB computeOldPaperBoxesBounds(const Model& model)
 {
     if (model.meshes.empty())
         return computeModelBounds(model);
-
-    return computeMeshBounds(model.meshes[0]);
+    return computeMeshBounds(model.meshes[0]); // Solo el mesh 0 contiene las cajas
 }
 
-// Transforma un AABB local (de un modelo) a espacio de mundo, aplicando
-// una posicion y una escala uniforme/no uniforme.
+// Convierte un AABB local a coordenadas de mundo
 AABB buildScaledBounds(const AABB& localBounds, const glm::vec3& worldPosition, const glm::vec3& scale)
 {
     AABB worldBounds;
@@ -149,9 +144,73 @@ AABB buildScaledBounds(const AABB& localBounds, const glm::vec3& worldPosition, 
     return worldBounds;
 }
 
+// Ajusta la posición XZ para mantener el modelo dentro del cuarto
+glm::vec3 keepInstanceInsideRoomXZ(
+    const glm::vec3& desiredPosition,
+    const AABB& roomBounds,
+    const AABB& localBounds,
+    const glm::vec3& scale,
+    float wallClearance)
+{
+    glm::vec3 corrected = desiredPosition;
+    const AABB instanceBounds = buildScaledBounds(localBounds, desiredPosition, scale);
 
+    const float minAllowedX = roomBounds.min.x + wallClearance;
+    const float maxAllowedX = roomBounds.max.x - wallClearance;
+    const float minAllowedZ = roomBounds.min.z + wallClearance;
+    const float maxAllowedZ = roomBounds.max.z - wallClearance;
 
-//  DETECCION DE PAREDES Y COLOCACION PROCEDURAL DE CAMARAS DE VIGILANCIA
+    if (instanceBounds.min.x < minAllowedX)
+        corrected.x += (minAllowedX - instanceBounds.min.x);
+    else if (instanceBounds.max.x > maxAllowedX)
+        corrected.x -= (instanceBounds.max.x - maxAllowedX);
+
+    if (instanceBounds.min.z < minAllowedZ)
+        corrected.z += (minAllowedZ - instanceBounds.min.z);
+    else if (instanceBounds.max.z > maxAllowedZ)
+        corrected.z -= (instanceBounds.max.z - maxAllowedZ);
+
+    return corrected;
+}
+
+// Crea instancias de props en el piso a partir de posiciones base
+std::vector<FurnitureInstance> createFloorInstancesFromAnchors(
+    const std::vector<glm::vec3>& anchorPositions,
+    const AABB& roomBounds,
+    const AABB& localBounds,
+    const glm::vec3& floorOffset,
+    float uniformScale,
+    float wallClearance)
+{
+    const float floorY = floorOffset.y;
+    std::vector<FurnitureInstance> instances;
+    instances.reserve(anchorPositions.size());
+
+    for (const glm::vec3& anchor : anchorPositions)
+    {
+        FurnitureInstance instance{};
+        instance.scale = glm::vec3(uniformScale);
+
+        const glm::vec3 desiredPosition = glm::vec3(
+            anchor.x,
+            floorY - (localBounds.min.y * uniformScale),
+            anchor.z
+        );
+
+        instance.position = keepInstanceInsideRoomXZ(
+            desiredPosition,
+            roomBounds,
+            localBounds,
+            instance.scale,
+            wallClearance);
+
+        instances.push_back(instance);
+    }
+
+    return instances;
+}
+
+// Detecta las paredes en el modelo de colisiones
 std::vector<WallAnchor> collectWallAnchors(const Model& collisionsModel, const glm::vec3& worldOffset)
 {
     std::vector<WallAnchor> wallAnchors;
@@ -180,6 +239,7 @@ std::vector<WallAnchor> collectWallAnchors(const Model& collisionsModel, const g
     return wallAnchors;
 }
 
+// Genera instancias de cámaras distribuidas en las paredes detectadas
 std::vector<CameraInstance> generateCameraInstances(
     const std::vector<WallAnchor>& wallAnchors,
     const glm::vec3& roomCenter,
@@ -207,8 +267,7 @@ std::vector<CameraInstance> generateCameraInstances(
 
         if (anchor.thinX)
         {
-            // Pared orientada a lo largo del eje Z: elegimos la cara que
-            // apunta al interior del nivel (hacia roomCenter).
+            // Pared orientada a lo largo del eje Z
             const float zMin = anchor.min.z + 0.2f;
             const float zMax = std::max(zMin, anchor.max.z - 0.2f);
             std::uniform_real_distribution<float> along(zMin, zMax);
@@ -222,15 +281,12 @@ std::vector<CameraInstance> generateCameraInstances(
                 along(rng)
             );
 
-            // Frente local del modelo ~= +Z, respaldo (WallAttach/Cord) ~= -Z.
-            // Se rota para dejar el respaldo contra la pared y el lente hacia el pasillo.
             float baseYaw = plusXFace ? 90.0f : -90.0f;
             instance.yawDeg = baseYaw + yawJitter(rng);
         }
         else
         {
-            // Pared orientada a lo largo del eje X: elegimos la cara que
-            // apunta al interior del nivel (hacia roomCenter).
+            // Pared orientada a lo largo del eje X
             const float xMin = anchor.min.x + 0.2f;
             const float xMax = std::max(xMin, anchor.max.x - 0.2f);
             std::uniform_real_distribution<float> along(xMin, xMax);
@@ -250,7 +306,7 @@ std::vector<CameraInstance> generateCameraInstances(
 
         instance.pitchDeg = pitchDown(rng);
 
-        // Descarta la instancia si queda demasiado cerca de otra ya colocada.
+        // Verifica que no esté demasiado cerca de otra cámara
         bool tooClose = false;
         for (const CameraInstance& placed : instances)
         {
@@ -268,27 +324,7 @@ std::vector<CameraInstance> generateCameraInstances(
     return instances;
 }
 
-// Registra una caja de colision estatica por cada camara de vigilancia
-// colocada, usando el modelo de la camara como base para el AABB.
-void addCameraCollisions(
-    CollisionManager& manager,
-    const Model& cameraModel,
-    const glm::vec3& cameraScale,
-    const std::vector<CameraInstance>& instances)
-{
-    const AABB localBounds = computeModelBounds(cameraModel);
-
-    for (const CameraInstance& instance : instances)
-        manager.addStaticBox(buildScaledBounds(localBounds, instance.position, cameraScale));
-}
-
-
-
-//  CREACION DE INSTANCIAS DE MOBILIARIO (props sueltos en el piso)
-
-
-// Construye la matriz de modelo (traslacion + escala) de una instancia de
-// mobiliario. No aplica rotacion porque estos props no la necesitan.
+// Crea la matriz de modelo para mobiliario
 glm::mat4 buildFurnitureModelMatrix(const FurnitureInstance& instance)
 {
     glm::mat4 model = glm::mat4(1.0f);
@@ -297,110 +333,104 @@ glm::mat4 buildFurnitureModelMatrix(const FurnitureInstance& instance)
     return model;
 }
 
-// Crea 3 instancias fijas de "office furniture" en distintas zonas del mapa,
-// apoyadas correctamente sobre el piso segun sus bounds locales.
-std::vector<FurnitureInstance> createOfficeFurnitureInstances(const AABB& localBounds, const glm::vec3& floorOffset)
+// Crea instancias de mobiliario de oficina
+std::vector<FurnitureInstance> createOfficeFurnitureInstances(
+    const AABB& roomBounds,
+    const AABB& localBounds,
+    const glm::vec3& floorOffset)
 {
     const float furnitureScale = 3.0f;
-    const float floorY = floorOffset.y;
+    const float wallClearance = 0.45f;
 
-    // Distribuidos en zonas separadas del mapa para que no aparezcan juntos.
-    std::vector<glm::vec3> anchorPositions =
-    {
+    std::vector<glm::vec3> anchorPositions = {
         glm::vec3(50.0f, 0.0f, -5.0f),
         glm::vec3(-14.0f, 0.0f, -22.0f),
         glm::vec3(16.0f, 0.0f, -34.0f)
     };
 
-    std::vector<FurnitureInstance> instances;
-    instances.reserve(anchorPositions.size());
-
-    for (const glm::vec3& anchor : anchorPositions)
-    {
-        FurnitureInstance instance{};
-        instance.scale = glm::vec3(furnitureScale);
-        instance.position = glm::vec3(
-            anchor.x,
-            floorY - (localBounds.min.y * furnitureScale),
-            anchor.z
-        );
-
-        instances.push_back(instance);
-    }
-
-    return instances;
+    return createFloorInstancesFromAnchors(
+        anchorPositions,
+        roomBounds,
+        localBounds,
+        floorOffset,
+        furnitureScale,
+        wallClearance);
 }
 
-// Crea 3 instancias fijas de cajas de carton/papel viejo, apoyadas sobre
-// el piso segun los bounds locales (ya filtrados para excluir el decal).
-std::vector<FurnitureInstance> createOldPaperBoxesInstances(const AABB& localBounds, const glm::vec3& floorOffset)
+// Crea instancias de cajas de cartón
+std::vector<FurnitureInstance> createOldPaperBoxesInstances(
+    const AABB& roomBounds,
+    const AABB& localBounds,
+    const glm::vec3& floorOffset)
 {
     const float boxesScale = 2.2f;
-    const float floorY = floorOffset.y;
+    const float wallClearance = 0.35f;
 
-    std::vector<glm::vec3> anchorPositions =
-    {
+    std::vector<glm::vec3> anchorPositions = {
         glm::vec3(1.0f, 0.0f, -12.0f),
         glm::vec3(12.0f, 0.0f, -40.0f),
         glm::vec3(-30.0f, 0.0f, -30.0f)
     };
 
-    std::vector<FurnitureInstance> instances;
-    instances.reserve(anchorPositions.size());
-
-    for (const glm::vec3& anchor : anchorPositions)
-    {
-        FurnitureInstance instance{};
-        instance.scale = glm::vec3(boxesScale);
-        instance.position = glm::vec3(
-            anchor.x,
-            floorY - (localBounds.min.y * boxesScale),
-            anchor.z
-        );
-
-        instances.push_back(instance);
-    }
-
-    return instances;
+    return createFloorInstancesFromAnchors(
+        anchorPositions,
+        roomBounds,
+        localBounds,
+        floorOffset,
+        boxesScale,
+        wallClearance);
 }
 
-// Crea 3 computadoras sci-fi en zonas alejadas del mapa.
-// Usa extremos del nivel para separarlas del resto de props.
+// Crea instancias de computadoras sci-fi
 std::vector<FurnitureInstance> createSciFiComputerInstances(
     const AABB& roomBounds,
     const AABB& localBounds,
     const glm::vec3& floorOffset)
 {
-    const float computerScale = 1.4f;
-    const float floorY = floorOffset.y;
+    const float computerScale = 1.0f;
+    const float cornerMargin = 22.0f;
+    const float wallClearance = 0.35f;
 
-    std::vector<glm::vec3> anchorPositions =
-    {
-        glm::vec3(roomBounds.min.x + 6.0f, 0.0f, roomBounds.min.z + 6.0f),
-        glm::vec3(roomBounds.max.x - 6.0f, 0.0f, roomBounds.min.z + 8.0f),
-        glm::vec3(roomBounds.min.x + 8.0f, 0.0f, roomBounds.max.z - 6.0f)
+    std::vector<glm::vec3> anchorPositions = {
+        glm::vec3(roomBounds.min.x + cornerMargin, 0.0f, roomBounds.min.z + cornerMargin),
+        glm::vec3(roomBounds.max.x - cornerMargin, 0.0f, roomBounds.min.z + cornerMargin),
+        glm::vec3(roomBounds.min.x + cornerMargin, 0.0f, roomBounds.max.z - cornerMargin),
+        glm::vec3(roomBounds.max.x - cornerMargin, 0.0f, roomBounds.max.z - cornerMargin)
     };
 
-    std::vector<FurnitureInstance> instances;
-    instances.reserve(anchorPositions.size());
-
-    for (const glm::vec3& anchor : anchorPositions)
-    {
-        FurnitureInstance instance{};
-        instance.scale = glm::vec3(computerScale);
-        instance.position = glm::vec3(
-            anchor.x,
-            floorY - (localBounds.min.y * computerScale),
-            anchor.z
-        );
-
-        instances.push_back(instance);
-    }
-
-    return instances;
+    return createFloorInstancesFromAnchors(
+        anchorPositions,
+        roomBounds,
+        localBounds,
+        floorOffset,
+        computerScale,
+        wallClearance);
 }
 
-// Agrega colisiones para props de piso con la misma regla (AABB escalado).
+// Crea instancias del demonio
+std::vector<FurnitureInstance> createFacelessBoneyHorrorDemonInstances(
+    const AABB& roomBounds,
+    const AABB& localBounds,
+    const glm::vec3& floorOffset)
+{
+    const float demonScale = 6.0f;
+    const float wallClearance = 0.45f;
+
+    std::vector<glm::vec3> anchorPositions = {
+        glm::vec3(roomBounds.max.x - 10.0f, 0.0f, roomBounds.max.z - 12.0f),
+        glm::vec3(roomBounds.min.x + 12.0f, 0.0f, roomBounds.min.z + 14.0f)
+    };
+
+    return createFloorInstancesFromAnchors(
+        anchorPositions,
+        roomBounds,
+        localBounds,
+        floorOffset,
+        demonScale,
+        wallClearance);
+}
+
+// Agrega colisiones para props de piso
 void addFurnitureCollisions(
     CollisionManager& manager,
     const AABB& localBounds,
@@ -410,14 +440,28 @@ void addFurnitureCollisions(
         manager.addStaticBox(buildScaledBounds(localBounds, instance.position, instance.scale));
 }
 
+// Agrega colisiones para cámaras
+void addFurnitureCollisions(
+    CollisionManager& manager,
+    const AABB& localBounds,
+    const glm::vec3& uniformScale,
+    const std::vector<CameraInstance>& instances)
+{
+    for (const CameraInstance& instance : instances)
+        manager.addStaticBox(buildScaledBounds(localBounds, instance.position, uniformScale));
+}
 
+// Agrega colisiones para props montados en pared
+void addFurnitureCollisions(
+    CollisionManager& manager,
+    const AABB& localBounds,
+    const std::vector<WallMountedInstance>& instances)
+{
+    for (const WallMountedInstance& instance : instances)
+        manager.addStaticBox(buildScaledBounds(localBounds, instance.position, instance.scale));
+}
 
-//  CREACION Y COLISIONES DE PROPS MONTADOS EN PARED (cabinas telefonicas)
-
-
-// Genera hasta 50 cabinas telefonicas publicas distribuidas aleatoriamente
-// dentro de los bounds del nivel (roomBounds), respetando una distancia
-// minima entre ellas y con escala/rotacion (yaw) aleatorias.
+// Genera cabinas telefónicas distribuidas en el nivel
 std::vector<WallMountedInstance> createPublicPhoneBoothInstances(
     const AABB& roomBounds,
     const AABB& boothBounds,
@@ -435,6 +479,7 @@ std::vector<WallMountedInstance> createPublicPhoneBoothInstances(
     const int targetCount = 50;
     const int maxAttempts = 2500;
     const float minDistance = 4.5f;
+    const float wallClearance = 0.25f;
 
     for (int attempt = 0; attempt < maxAttempts && (int)instances.size() < targetCount; attempt++)
     {
@@ -442,14 +487,20 @@ std::vector<WallMountedInstance> createPublicPhoneBoothInstances(
 
         float s = scaleVariation(rng);
         instance.scale = glm::vec3(s, s, s);
-        instance.position = glm::vec3(
+        const glm::vec3 desiredPosition = glm::vec3(
             xDist(rng),
             worldOffset.y - (boothBounds.min.y * s),
             zDist(rng)
         );
+        instance.position = keepInstanceInsideRoomXZ(
+            desiredPosition,
+            roomBounds,
+            boothBounds,
+            instance.scale,
+            wallClearance);
         instance.yawDeg = yawVariation(rng);
 
-        // Descarta la instancia si queda demasiado cerca de otra ya colocada.
+        // Verifica que no esté demasiado cerca de otra cabina
         bool tooClose = false;
         for (const WallMountedInstance& placed : instances)
         {
@@ -467,26 +518,7 @@ std::vector<WallMountedInstance> createPublicPhoneBoothInstances(
     return instances;
 }
 
-// Registra una caja de colision estatica por cada instancia montada en
-// pared (por ejemplo, cada cabina telefonica), usando el AABB local del
-// modelo escalado y trasladado a la posicion de cada instancia.
-void addWallMountedCollisions(CollisionManager& manager, const Model& model, const std::vector<WallMountedInstance>& instances)
-{
-    AABB localBounds = computeModelBounds(model);
-
-    for (const WallMountedInstance& instance : instances)
-    {
-        manager.addStaticBox(buildScaledBounds(localBounds, instance.position, instance.scale));
-    }
-}
-
-
-
-//  FUNCIONES DE DIBUJADO (por lote de instancias)
-
-
-// Dibuja todas las camaras de vigilancia aplicando su transformacion
-// individual (traslacion, yaw, pitch y escala global de camara).
+// Dibuja las instancias de cámaras de vigilancia
 void drawCameraInstances(
     Shader& shader,
     Model& cameraModel,
@@ -505,8 +537,7 @@ void drawCameraInstances(
     }
 }
 
-// Dibuja las cajas de carton/papel viejo. Solo dibuja la malla de cajas
-// (mesh 0) para evitar el piso negro del decal (mesh 1).
+// Dibuja las cajas de cartón (solo el mesh 0)
 void drawOldPaperBoxesInstances(
     Shader& shader,
     Model& boxesModel,
@@ -519,12 +550,11 @@ void drawOldPaperBoxesInstances(
     {
         glm::mat4 boxesModelMatrix = buildFurnitureModelMatrix(instance);
         shader.setMat4("model", boxesModelMatrix);
-
         boxesModel.meshes[0].Draw(shader);
     }
 }
 
-// Dibuja instancias genericas de mobiliario (traslacion + escala).
+// Dibuja instancias genéricas de mobiliario
 void drawFurnitureInstances(
     Shader& shader,
     Model& furnitureModel,
@@ -538,8 +568,8 @@ void drawFurnitureInstances(
     }
 }
 
-// Dibuja instancias montadas en pared (traslacion + rotacion yaw + escala).
-void drawWallMountedInstances(
+// Dibuja instancias de props montados en pared
+void drawFurnitureInstances(
     Shader& shader,
     Model& model,
     const std::vector<WallMountedInstance>& instances)
@@ -555,18 +585,14 @@ void drawWallMountedInstances(
     }
 }
 
-
-
-//  PUNTO DE ENTRADA
 int main() {
-
-    // 1) Inicializar GLFW y crear contexto OpenGL 3.3 Core
+    // 1. Inicializar GLFW
     glfwInit();
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 
-    // 2) Crear ventana principal
+    // 2. Crear ventana
     GLFWwindow* window = glfwCreateWindow(800, 600, "Prueba de Entorno - Grupo", NULL, NULL);
     if (window == NULL) {
         std::cout << "Error al crear la ventana GLFW. Revisa la DLL." << std::endl;
@@ -580,7 +606,7 @@ int main() {
 
     glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 
-    // 3) Inicializar GLAD (carga de funciones OpenGL)
+    // 3. Inicializar GLAD (Cargador de punteros)
     if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress)) {
         std::cout << "Error al inicializar GLAD. Asegurate de que glad.c este en el proyecto." << std::endl;
         return -1;
@@ -588,35 +614,36 @@ int main() {
 
     glEnable(GL_DEPTH_TEST);
 
-    // 4) PRUEBA DE ASSIMP
+    // 4. PRUEBA DE ASSIMP
     // Si esta linea no genera error de compilacion, tu .lib esta perfecto.
     Assimp::Importer importer;
     std::cout << "Las librerias y Assimp enlazaron correctamente!" << std::endl;
 
-    // 5) Cargar shaders
+    // 5. Generar shaders
     Shader backroomsShader("shaders/backrooms.vs", "shaders/backrooms.fs");
-    // Shader auxiliar para depurar AABB (uso opcional con codigo comentado).
     Shader cubeShader("shaders/basico.vs", "shaders/basico.fs");
-    
-    // 6) Cargar modelos
+
+    // 6. Cargar modelos
     Model backroomsModel("models/backrooms_level_0/backrooms.obj");
     Model backroomsCollisionsModel("models/backrooms_level_0_collisions/backrooms.obj");
     Model surveillanceCameraModel("models/surveillance_camera/scene.gltf");
     Model officeFurnitureModel("models/office_furniture/scene.gltf");
     Model oldPaperBoxesModel("models/old_paper__cardboard_boxes/scene.gltf");
+    Model facelessBoneyHorrorDemonModel("models/faceless_boney_horror_demon/scene.gltf");
     Model sciFiComputerModel("models/sci-fi_computer/scene.gltf");
     Model publicPhoneBoothModel("models/public_phone_booth/scene.gltf");
     std::cout << "Meshes: " << backroomsCollisionsModel.meshes.size() << std::endl;
 
     camera.MovementSpeed = 10;
 
-    // 7) Generar instancias proceduralmente (camaras y props)
+    // Generar instancias procedurales de cámaras y props
     CameraPlacementConfig cameraCfg;
     const AABB backroomsBounds = computeModelBounds(backroomsCollisionsModel);
     const std::vector<WallAnchor> wallAnchors = collectWallAnchors(backroomsCollisionsModel, backroomsPos);
     const AABB surveillanceCameraBounds = computeModelBounds(surveillanceCameraModel);
     const glm::vec3 roomCenter = (backroomsBounds.min + backroomsBounds.max) * 0.5f + backroomsPos;
     const float cameraWallAttachOffset = (-surveillanceCameraBounds.min.z * surveillanceCameraScale.z) + cameraCfg.wallClearance;
+    
     const std::vector<CameraInstance> surveillanceInstances = generateCameraInstances(
         wallAnchors,
         roomCenter,
@@ -624,30 +651,48 @@ int main() {
         cameraCfg);
 
     const AABB officeFurnitureBounds = computeModelBounds(officeFurnitureModel);
-    const std::vector<FurnitureInstance> officeFurnitureInstances = createOfficeFurnitureInstances(officeFurnitureBounds, backroomsPos);
+    const std::vector<FurnitureInstance> officeFurnitureInstances = createOfficeFurnitureInstances(
+        backroomsBounds,
+        officeFurnitureBounds,
+        backroomsPos);
+        
     const AABB oldPaperBoxesBounds = computeOldPaperBoxesBounds(oldPaperBoxesModel);
-    const std::vector<FurnitureInstance> oldPaperBoxesInstances = createOldPaperBoxesInstances(oldPaperBoxesBounds, backroomsPos);
+    const std::vector<FurnitureInstance> oldPaperBoxesInstances = createOldPaperBoxesInstances(
+        backroomsBounds,
+        oldPaperBoxesBounds,
+        backroomsPos);
+        
+    const AABB facelessBoneyHorrorDemonBounds = computeModelBounds(facelessBoneyHorrorDemonModel);
+    const std::vector<FurnitureInstance> facelessBoneyHorrorDemonInstances = createFacelessBoneyHorrorDemonInstances(
+        backroomsBounds,
+        facelessBoneyHorrorDemonBounds,
+        backroomsPos);
+        
     const AABB sciFiComputerBounds = computeModelBounds(sciFiComputerModel);
     const std::vector<FurnitureInstance> sciFiComputerInstances = createSciFiComputerInstances(
         backroomsBounds,
         sciFiComputerBounds,
         backroomsPos);
+        
     const AABB publicPhoneBoothBounds = computeModelBounds(publicPhoneBoothModel);
-    const std::vector<WallMountedInstance> publicPhoneBoothInstances = createPublicPhoneBoothInstances(backroomsBounds, publicPhoneBoothBounds, backroomsPos);
+    const std::vector<WallMountedInstance> publicPhoneBoothInstances = createPublicPhoneBoothInstances(
+        backroomsBounds, 
+        publicPhoneBoothBounds, 
+        backroomsPos);
 
     std::cout << "Camaras colocadas: " << surveillanceInstances.size() << std::endl;
     
-    // 8) Registrar colisiones estaticas
+    // 7. Colisiones
     colManager.addStaticBox(backroomsCollisionsModel, backroomsPos);
 
-    addCameraCollisions(colManager, surveillanceCameraModel, surveillanceCameraScale, surveillanceInstances);
+    addFurnitureCollisions(colManager, surveillanceCameraBounds, surveillanceCameraScale, surveillanceInstances);
     addFurnitureCollisions(colManager, officeFurnitureBounds, officeFurnitureInstances);
     addFurnitureCollisions(colManager, oldPaperBoxesBounds, oldPaperBoxesInstances);
+    addFurnitureCollisions(colManager, facelessBoneyHorrorDemonBounds, facelessBoneyHorrorDemonInstances);
     addFurnitureCollisions(colManager, sciFiComputerBounds, sciFiComputerInstances);
-    addWallMountedCollisions(colManager, publicPhoneBoothModel, publicPhoneBoothInstances);
+    addFurnitureCollisions(colManager, publicPhoneBoothBounds, publicPhoneBoothInstances);
 
-    
-    // 9) Bucle principal de render
+    // 8. Bucle de Renderizado
     while (!glfwWindowShouldClose(window)) {
         
         float currentFrame = glfwGetTime();
@@ -682,31 +727,24 @@ int main() {
 
         //colManager.drawCollisionBoxes(cubeShader);
 
-        // -- Capa de props: camaras y mobiliario --
+        // Dibujar todas las instancias de props
         drawCameraInstances(backroomsShader, surveillanceCameraModel, surveillanceInstances, surveillanceCameraScale);
-
         drawFurnitureInstances(backroomsShader, officeFurnitureModel, officeFurnitureInstances);
-
         drawOldPaperBoxesInstances(backroomsShader, oldPaperBoxesModel, oldPaperBoxesInstances);
-
+        drawFurnitureInstances(backroomsShader, facelessBoneyHorrorDemonModel, facelessBoneyHorrorDemonInstances);
         drawFurnitureInstances(backroomsShader, sciFiComputerModel, sciFiComputerInstances);
-
-        // -- Props montados en pared --
-        drawWallMountedInstances(backroomsShader, publicPhoneBoothModel, publicPhoneBoothInstances);
+        drawFurnitureInstances(backroomsShader, publicPhoneBoothModel, publicPhoneBoothInstances);
 
         glfwSwapBuffers(window);
         glfwPollEvents();
     }
 
-    
-    // 10) Liberar recursos de ventana/contexto
+    // 9. Limpiar memoria
     glfwTerminate();
-
     return 0;
 }
 
-// Procesa el input continuo (teclas mantenidas presionadas) en cada frame:
-// movimiento de camara (WASD) y salida con ESC.
+// process all input: query GLFW whether relevant keys are pressed/released this frame and react accordingly
 void processInput(GLFWwindow* window)
 {
     if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
@@ -724,9 +762,7 @@ void processInput(GLFWwindow* window)
         camera.ProcessKeyboard(RIGHT, deltaTime, colManager);
 }
 
-// glfw: se ejecuta cuando el tamano de la ventana cambia (por el SO o el
-// usuario), para ajustar el viewport de OpenGL al nuevo tamano.
-// -------------------------------------------------------
+// glfw: whenever the window size changed (by OS or user resize) this callback function executes
 void framebuffer_size_callback(GLFWwindow* window, int width, int height)
 {
     // make sure the viewport matches the new window dimensions; note that width and 
@@ -734,8 +770,7 @@ void framebuffer_size_callback(GLFWwindow* window, int width, int height)
     glViewport(0, 0, width, height);
 }
 
-// glfw: se llama cada vez que el mouse se mueve; actualiza la orientacion de la camara en primera persona.
-// -------------------------------------------------------
+// glfw: whenever the mouse moves, this callback is called
 void mouse_callback(GLFWwindow* window, double xpos, double ypos)
 {
     if (firstMouse)
@@ -754,7 +789,7 @@ void mouse_callback(GLFWwindow* window, double xpos, double ypos)
     camera.ProcessMouseMovement(xoffset, yoffset);
 }
 
-// glfw: se llama cada vez que la rueda del mouse se desplaza; controla el zoom (FOV) de la camara.
+// glfw: whenever the mouse scroll wheel scrolls, this callback is called
 void scroll_callback(GLFWwindow* window, double xoffset, double yoffset)
 {
     camera.ProcessMouseScroll(yoffset);

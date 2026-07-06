@@ -1307,13 +1307,13 @@
   ],
   "images": [
     {
-      "uri": "textures/tripo_mat_cef44a27_baseColor.jpeg"
+      "uri": "tripo_mat_cef44a27_baseColor.jpeg"
     },
     {
-      "uri": "textures/tripo_mat_cef44a27_metallicRoughness.png"
+      "uri": "tripo_mat_cef44a27_metallicRoughness.png"
     },
     {
-      "uri": "textures/tripo_mat_cef44a27_normal.png"
+      "uri": "tripo_mat_cef44a27_normal.png"
     }
   ],
   "materials": [
