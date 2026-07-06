@@ -587,9 +587,9 @@ int main() {
     const AABB officeBounds = computeModelBounds(officeFurnitureModel);
     const std::vector<glm::vec3> officeAnchors = {
         glm::vec3(roomCenter.x - 28.0f, 0.0f, roomCenter.z - 24.0f),
-        glm::vec3(roomCenter.x + 30.0f, 0.0f, roomCenter.z - 18.0f),
+        glm::vec3(roomCenter.x + 32.0f, 0.0f, roomCenter.z - 20.0f),
         glm::vec3(roomCenter.x - 22.0f, 0.0f, roomCenter.z + 26.0f),
-        glm::vec3(roomCenter.x + 24.0f, 0.0f, roomCenter.z + 20.0f)
+        glm::vec3(roomCenter.x + 24.0f, 0.0f, roomCenter.z + 22.0f)
     };
     const std::vector<float> officeYaws = { 20.0f, -35.0f, 110.0f, -145.0f };
     const std::vector<Instance> officeInstances = createFloorInstances(officeAnchors, roomWorldBounds, officeBounds, floorY, 3.0f, officeYaws, 0.45f);
@@ -598,18 +598,18 @@ int main() {
     const AABB boxesBounds = computeModelBounds(oldPaperBoxesModel, true);
     const std::vector<glm::vec3> boxesAnchors = {
         glm::vec3(roomCenter.x - 18.0f, 0.0f, roomCenter.z - 30.0f),
-        glm::vec3(roomCenter.x + 12.0f, 0.0f, roomCenter.z - 34.0f),
-        glm::vec3(roomCenter.x - 26.0f, 0.0f, roomCenter.z + 12.0f),
-        glm::vec3(roomCenter.x + 24.0f, 0.0f, roomCenter.z + 30.0f)
-    };
+        glm::vec3(roomCenter.x + 14.0f, 0.0f, roomCenter.z - 36.0f),   
+        glm::vec3(roomCenter.x - 28.0f, 0.0f, roomCenter.z + 14.0f),   
+        glm::vec3(roomCenter.x + 26.0f, 0.0f, roomCenter.z + 32.0f)   
+};
     const std::vector<float> boxesYaws = { 12.0f, 65.0f, -20.0f, 140.0f };
     const std::vector<Instance> boxesInstances = createFloorInstances(boxesAnchors, roomWorldBounds, boxesBounds, floorY, 2.2f, boxesYaws, 0.35f);
 
     // Demonio
     const AABB demonBounds = computeModelBounds(facelessBoneyHorrorDemonModel);
     const std::vector<glm::vec3> demonAnchors = {
-        glm::vec3(roomWorldBounds.min.x + 12.0f, 0.0f, roomWorldBounds.min.z + 12.0f),
-        glm::vec3(roomWorldBounds.max.x - 12.0f, 0.0f, roomWorldBounds.max.z - 12.0f)
+        glm::vec3(roomWorldBounds.min.x + 18.0f, 0.0f, roomWorldBounds.min.z + 18.0f),
+        glm::vec3(roomWorldBounds.max.x - 18.0f, 0.0f, roomWorldBounds.max.z - 18.0f)
     };
     const std::vector<float> demonYaws = { 45.0f, -135.0f };
     const std::vector<Instance> demonInstances = createFloorInstances(demonAnchors, roomWorldBounds, demonBounds, floorY, 6.0f, demonYaws, 0.45f);
@@ -617,9 +617,9 @@ int main() {
     // Computadoras
     const AABB computerBounds = computeModelBounds(sciFiComputerModel);
     const std::vector<glm::vec3> computerAnchors = {
-        glm::vec3(roomWorldBounds.min.x + 20.0f, 0.0f, roomWorldBounds.min.z + 20.0f),
+        glm::vec3(roomWorldBounds.min.x + 25.0f, 0.0f, roomWorldBounds.min.z + 25.0f),
         glm::vec3(roomWorldBounds.max.x - 20.0f, 0.0f, roomWorldBounds.min.z + 20.0f),
-        glm::vec3(roomWorldBounds.min.x + 20.0f, 0.0f, roomWorldBounds.max.z - 20.0f),
+        glm::vec3(roomWorldBounds.min.x + 25.0f, 0.0f, roomWorldBounds.max.z - 25.0f),
         glm::vec3(roomWorldBounds.max.x - 20.0f, 0.0f, roomWorldBounds.max.z - 20.0f)
     };
     const std::vector<float> computerYaws = { 35.0f, -35.0f, 145.0f, -145.0f };
