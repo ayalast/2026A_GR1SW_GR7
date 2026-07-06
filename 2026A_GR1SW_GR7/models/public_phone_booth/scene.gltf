@@ -2597,25 +2597,25 @@
   ],
   "images": [
     {
-      "uri": "textures/uvgroup1_baseColor.jpeg"
+      "uri": "uvgroup1_baseColor.jpeg"
     },
     {
-      "uri": "textures/uvgroup1_metallicRoughness.png"
+      "uri": "uvgroup1_metallicRoughness.png"
     },
     {
-      "uri": "textures/uvgroup1_emissive.jpeg"
+      "uri": "uvgroup1_emissive.jpeg"
     },
     {
-      "uri": "textures/uvgroup1_normal.png"
+      "uri": "uvgroup1_normal.png"
     },
     {
-      "uri": "textures/UVgroup2_baseColor.jpeg"
+      "uri": "UVgroup2_baseColor.jpeg"
     },
     {
-      "uri": "textures/UVgroup2_metallicRoughness.png"
+      "uri": "UVgroup2_metallicRoughness.png"
     },
     {
-      "uri": "textures/UVgroup2_normal.png"
+      "uri": "UVgroup2_normal.png"
     }
   ],
   "materials": [
