@@ -1,0 +1,35 @@
+# Blender 5.1.2 MTL File: 'border.blend'
+# www.blender.org
+
+newmtl Material.001
+Ns 250.000000
+Ka 1.000000 1.000000 1.000000
+Ks 0.500000 0.500000 0.500000
+Ke 0.000000 0.000000 0.000000
+Ni 1.500000
+d 1.000000
+illum 2
+map_Kd Material.001_baseColor.png
+map_Bump -bm 0.700000 Material.001_normal.jpeg
+
+newmtl Material.002
+Ns 250.000000
+Ka 1.000000 1.000000 1.000000
+Ks 0.406740 0.406740 0.406740
+Ke 0.000000 0.000000 0.000000
+Ni 1.500000
+d 1.000000
+illum 2
+map_Kd Material_baseColor.jpeg
+map_Bump -bm 0.300000 Material_normal.png
+
+newmtl Material.005
+Ns 307.520142
+Ka 1.000000 1.000000 1.000000
+Ks 0.500000 0.500000 0.500000
+Ni 1.500000
+d 1.000000
+illum 2
+map_Kd Material.005_baseColor.png
+map_Ke Material.005_emissive.png
+map_Bump -bm 0.700000 Material.005_normal.png

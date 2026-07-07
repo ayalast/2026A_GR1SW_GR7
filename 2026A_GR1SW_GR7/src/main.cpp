@@ -552,6 +552,7 @@ int main() {
     // 6. Cargar modelos
     Model backroomsModel("models/backrooms_level_0/backrooms.obj");
     Model backroomsCollisionsModel("models/backrooms_level_0_collisions/backrooms.obj");
+    Model border("models/border/border.obj");
     Model surveillanceCameraModel("models/surveillance_camera/camaras_vigilancia.obj");
     Model officeFurnitureModel("models/office_furniture/office.obj");
     Model oldPaperBoxesModel("models/old_paper__cardboard_boxes/carton_papel.obj");
@@ -634,6 +635,7 @@ int main() {
 
     // 8. Colisiones
     colManager.addStaticBox(backroomsCollisionsModel, backroomsPos);
+    colManager.addStaticBox(border, backroomsPos);
     addFurnitureCollisions(colManager, cameraBounds, cameraInstances, glm::vec3(cameraScale));
     addInstancesCollision(colManager, officeFurnitureModel, officeInstances);
     addInstancesCollision(colManager, oldPaperBoxesModel, boxesInstances, true);
@@ -664,6 +666,7 @@ int main() {
         model = glm::translate(model, backroomsPos);
         backroomsShader.setMat4("model", model);
         backroomsModel.Draw(backroomsShader);
+        border.Draw(backroomsShader);
 
         // Dibujar instancias (usando la versión para cámaras)
         drawCameraInstances(backroomsShader, surveillanceCameraModel, cameraInstances, glm::vec3(1.0f));
