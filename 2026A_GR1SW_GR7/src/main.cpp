@@ -609,12 +609,12 @@ int main() {
     // Demonio
     const AABB demonBounds = computeModelBounds(monsterAlienModel);
     const std::vector<glm::vec3> demonAnchors = {
-        glm::vec3(roomCenter.x - 94.0f, 0.0f, roomCenter.z - 26.0f),
+        glm::vec3(roomCenter.x - 50.0f, 0.0f, roomCenter.z - 16.0f),
         glm::vec3(roomCenter.x + 32.0f, 0.0f, roomCenter.z - 20.0f),
-        glm::vec3(roomCenter.x + 30.0f, 0.0f, roomCenter.z + 24.0f)
+        glm::vec3(roomWorldBounds.min.x + 28.0f, 0.0f, roomWorldBounds.min.z + 30.0f)
     };
     const std::vector<float> demonYaws = { 45.0f, -135.0f };
-    const std::vector<Instance> demonInstances = createFloorInstances(demonAnchors, roomWorldBounds, demonBounds, floorY, 6.0f, demonYaws, 0.45f);
+    const std::vector<Instance> demonInstances = createFloorInstances(demonAnchors, roomWorldBounds, demonBounds, floorY, 0.008f, demonYaws, 0.45f);
 
     // Computadoras
     const AABB computerBounds = computeModelBounds(sciFiComputerModel);
