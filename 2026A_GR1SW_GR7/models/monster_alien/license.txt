@@ -1,0 +1,11 @@
+Model Information:
+* title:	Monster_Alien
+* source:	https://sketchfab.com/3d-models/monster-alien-7076e13f3562430f90fed0ab46dba39c
+* author:	maxbiba (https://sketchfab.com/maxbiba)
+
+Model License:
+* license type:	CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
+* requirements:	Author must be credited. Commercial use is allowed.
+
+If you use this 3D model in your project be sure to copy paste this credit wherever you share it:
+This work is based on "Monster_Alien" (https://sketchfab.com/3d-models/monster-alien-7076e13f3562430f90fed0ab46dba39c) by maxbiba (https://sketchfab.com/maxbiba) licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)

@@ -556,7 +556,7 @@ int main() {
     Model surveillanceCameraModel("models/surveillance_camera/camaras_vigilancia.obj");
     Model officeFurnitureModel("models/office_furniture/office.obj");
     Model oldPaperBoxesModel("models/old_paper__cardboard_boxes/carton_papel.obj");
-    Model facelessBoneyHorrorDemonModel("models/faceless_boney_horror_demon/personaje.obj");
+    Model monsterAlienModel("models/monster_alien/scene.obj");
     Model sciFiComputerModel("models/sci-fi_computer/computadora.obj");
     Model publicPhoneBoothModel("models/public_phone_booth/public_phone.obj");
     std::cout << "Meshes: " << backroomsCollisionsModel.meshes.size() << std::endl;
@@ -587,9 +587,9 @@ int main() {
     // Oficina
     const AABB officeBounds = computeModelBounds(officeFurnitureModel);
     const std::vector<glm::vec3> officeAnchors = {
-        glm::vec3(roomCenter.x - 28.0f, 0.0f, roomCenter.z - 24.0f),
+        glm::vec3(roomCenter.x - 40.0f, 0.0f, roomCenter.z - 24.0f),
         glm::vec3(roomCenter.x + 32.0f, 0.0f, roomCenter.z - 20.0f),
-        glm::vec3(roomCenter.x - 22.0f, 0.0f, roomCenter.z + 26.0f),
+        glm::vec3(roomCenter.x - 55.0f, 0.0f, roomCenter.z + 32.0f),
         glm::vec3(roomCenter.x + 24.0f, 0.0f, roomCenter.z + 22.0f)
     };
     const std::vector<float> officeYaws = { 20.0f, -35.0f, 110.0f, -145.0f };
@@ -598,7 +598,7 @@ int main() {
     // Cajas
     const AABB boxesBounds = computeModelBounds(oldPaperBoxesModel, true);
     const std::vector<glm::vec3> boxesAnchors = {
-        glm::vec3(roomCenter.x - 18.0f, 0.0f, roomCenter.z - 30.0f),
+        glm::vec3(roomCenter.x - 18.0f, 0.0f, roomCenter.z - 33.0f),
         glm::vec3(roomCenter.x + 14.0f, 0.0f, roomCenter.z - 36.0f),   
         glm::vec3(roomCenter.x - 28.0f, 0.0f, roomCenter.z + 14.0f),   
         glm::vec3(roomCenter.x + 26.0f, 0.0f, roomCenter.z + 32.0f)   
@@ -607,10 +607,11 @@ int main() {
     const std::vector<Instance> boxesInstances = createFloorInstances(boxesAnchors, roomWorldBounds, boxesBounds, floorY, 2.2f, boxesYaws, 0.35f);
 
     // Demonio
-    const AABB demonBounds = computeModelBounds(facelessBoneyHorrorDemonModel);
+    const AABB demonBounds = computeModelBounds(monsterAlienModel);
     const std::vector<glm::vec3> demonAnchors = {
-        glm::vec3(roomWorldBounds.min.x + 18.0f, 0.0f, roomWorldBounds.min.z + 18.0f),
-        glm::vec3(roomWorldBounds.max.x - 18.0f, 0.0f, roomWorldBounds.max.z - 18.0f)
+        glm::vec3(roomCenter.x - 94.0f, 0.0f, roomCenter.z - 26.0f),
+        glm::vec3(roomCenter.x + 32.0f, 0.0f, roomCenter.z - 20.0f),
+        glm::vec3(roomCenter.x + 30.0f, 0.0f, roomCenter.z + 24.0f)
     };
     const std::vector<float> demonYaws = { 45.0f, -135.0f };
     const std::vector<Instance> demonInstances = createFloorInstances(demonAnchors, roomWorldBounds, demonBounds, floorY, 6.0f, demonYaws, 0.45f);
@@ -619,9 +620,9 @@ int main() {
     const AABB computerBounds = computeModelBounds(sciFiComputerModel);
     const std::vector<glm::vec3> computerAnchors = {
         glm::vec3(roomWorldBounds.min.x + 25.0f, 0.0f, roomWorldBounds.min.z + 25.0f),
-        glm::vec3(roomWorldBounds.max.x - 20.0f, 0.0f, roomWorldBounds.min.z + 20.0f),
+        glm::vec3(roomWorldBounds.max.x - 25.0f, 0.0f, roomWorldBounds.min.z + 25.0f),
         glm::vec3(roomWorldBounds.min.x + 25.0f, 0.0f, roomWorldBounds.max.z - 25.0f),
-        glm::vec3(roomWorldBounds.max.x - 20.0f, 0.0f, roomWorldBounds.max.z - 20.0f)
+        glm::vec3(roomWorldBounds.max.x - 25.0f, 0.0f, roomWorldBounds.max.z - 25.0f)
     };
     const std::vector<float> computerYaws = { 35.0f, -35.0f, 145.0f, -145.0f };
     const std::vector<Instance> computerInstances = createFloorInstances(computerAnchors, roomWorldBounds, computerBounds, floorY, 1.0f, computerYaws, 0.35f);
@@ -639,7 +640,7 @@ int main() {
     addFurnitureCollisions(colManager, cameraBounds, cameraInstances, glm::vec3(cameraScale));
     addInstancesCollision(colManager, officeFurnitureModel, officeInstances);
     addInstancesCollision(colManager, oldPaperBoxesModel, boxesInstances, true);
-    addInstancesCollision(colManager, facelessBoneyHorrorDemonModel, demonInstances);
+    addInstancesCollision(colManager, monsterAlienModel, demonInstances);
     addInstancesCollision(colManager, sciFiComputerModel, computerInstances);
     addInstancesCollision(colManager, publicPhoneBoothModel, boothInstances);
 
@@ -672,7 +673,7 @@ int main() {
         drawCameraInstances(backroomsShader, surveillanceCameraModel, cameraInstances, glm::vec3(1.0f));
         drawInstances(backroomsShader, officeFurnitureModel, officeInstances);
         drawInstances(backroomsShader, oldPaperBoxesModel, boxesInstances, true);
-        drawInstances(backroomsShader, facelessBoneyHorrorDemonModel, demonInstances);
+        drawInstances(backroomsShader, monsterAlienModel, demonInstances);
         drawInstances(backroomsShader, sciFiComputerModel, computerInstances);
         drawInstances(backroomsShader, publicPhoneBoothModel, boothInstances);
 
