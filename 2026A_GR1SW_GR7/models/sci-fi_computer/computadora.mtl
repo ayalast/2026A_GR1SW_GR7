@@ -9,6 +9,7 @@ Ni 1.500000
 d 1.000000
 illum 2
 map_Kd computer_baseColor.png
+map_Ks computer_metallicRoughness.png
 map_Ke computer_emissive.png
 map_Bump -bm 1.000000 computer_normal.png
 
@@ -21,6 +22,7 @@ Ni 1.500000
 d 1.000000
 illum 2
 map_Kd keyboard_baseColor.png
+map_Ks keyboard_metallicRoughness.png
 map_Bump -bm 1.000000 keyboard_normal.png
 
 newmtl keys
@@ -31,6 +33,7 @@ Ni 1.500000
 d 1.000000
 illum 2
 map_Kd keys_baseColor.png
+map_Ks keys_metallicRoughness.png
 map_Ke keys_emissive.png
 map_Bump -bm 1.000000 keys_normal.png
 
@@ -42,5 +45,6 @@ Ni 1.500000
 d 1.000000
 illum 2
 map_Kd screen_baseColor.png
+map_Ks screen_metallicRoughness.png
 map_Ke screen_emissive.png
 map_Bump -bm 1.000000 screen_normal.png

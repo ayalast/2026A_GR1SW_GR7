@@ -6,6 +6,8 @@
 #include <cfloat>
 #include <cmath>
 #include <algorithm>
+#include <unordered_map>
+#include <fstream>
 
 // Incluimos Assimp SOLO para probar que el vinculador (Linker) no de errores.
 #include <assimp/Importer.hpp>
@@ -45,6 +47,8 @@ glm::vec3 backroomsPos(0.0f, -3.0f, 0.0f);
 
 // Manager de colisiones
 CollisionManager colManager;
+
+bool flashlightOn = false;
 
 // ============================================================================
 // ESTRUCTURAS Y TIPOS COMUNES
@@ -508,6 +512,90 @@ void addFurnitureCollisions(
         manager.addStaticBox(buildScaledBounds(localBounds, instance.position, uniformScale));
 }
 
+struct CeilingLight
+{
+    glm::vec3 position;
+    bool isOn;
+};
+
+
+// ============================================================================
+// GENERAR LUCES DE TECHO EN CUADRICULA
+// ============================================================================
+void findCeilingLights(const Model& model, const glm::vec3& worldOffset, std::vector<CeilingLight>& lights)
+{
+    std::random_device rd;
+    std::mt19937 rng(rd());
+    std::uniform_real_distribution<float> roll(0.0f, 1.0f);
+    // El techo (Material.005) es un quad plano con UV de paneles, no geometria individual.
+    // Generamos luces en cuadricula sobre los limites reales del mapa.
+    // Bounds del quad de techo segun el OBJ + worldOffset
+    float xMin = -182.4f + worldOffset.x;
+    float xMax =  194.8f + worldOffset.x;
+    float zMin = -185.7f + worldOffset.z;
+    float zMax =  191.5f + worldOffset.z;
+    // La luz se coloca 1.2 unidades debajo del panel para iluminar el techo desde abajo
+    float ceilY = 8.565f + worldOffset.y - 1.2f;
+    // Espaciado entre luces: ~12 unidades para coincidir con los paneles de la textura
+    float spacing = 12.0f;
+    for (float x = xMin + spacing * 0.5f; x < xMax; x += spacing)
+    {
+        for (float z = zMin + spacing * 0.5f; z < zMax; z += spacing)
+        {
+            CeilingLight cl;
+            cl.position = glm::vec3(x, ceilY, z);
+            // Solo 5% de probabilidad de que una luz este apagada
+            cl.isOn = roll(rng) > 0.05f;
+            lights.push_back(cl);
+        }
+    }
+    std::cout << "Ceiling lights generated: " << lights.size() << std::endl;
+    // Registrar en archivo para diagnostico
+    std::ofstream diagFile("ceiling_lights_diag.txt");
+    if (diagFile.is_open())
+    {
+        diagFile << "Total ceiling lights: " << lights.size() << "\n";
+        for (size_t i = 0; i < lights.size() && i < 20; i++)
+        {
+            diagFile << "Light " << i << ": pos=(" << lights[i].position.x << "," << lights[i].position.y << "," << lights[i].position.z << ") on=" << lights[i].isOn << "\n";
+        }
+    }
+}
+
+
+// ============================================================================
+// OBTENER CENTRO LOCAL DE LAMPARA
+// ============================================================================
+glm::vec3 findLocalLampCenter(const Model& model)
+{
+    glm::vec3 sum(0.0f);
+    int count = 0;
+    for (const Mesh& mesh : model.meshes)
+    {
+        bool isLampMesh = false;
+        for (const Texture& tex : mesh.textures)
+        {
+            if (tex.path.find("oillamp") != std::string::npos || tex.path.find("lantern") != std::string::npos)
+            {
+                isLampMesh = true;
+                break;
+            }
+        }
+        if (!isLampMesh)
+            continue;
+        for (const Vertex& v : mesh.vertices)
+        {
+            sum += v.Position;
+            count++;
+        }
+    }
+    if (count > 0)
+    {
+        return sum / (float)count;
+    }
+    return glm::vec3(0.0f);
+}
+
 // ============================================================================
 // MAIN
 // ============================================================================
@@ -644,6 +732,17 @@ int main() {
     addInstancesCollision(colManager, sciFiComputerModel, computerInstances);
     addInstancesCollision(colManager, publicPhoneBoothModel, boothInstances);
 
+    // Inicializar luces
+    std::vector<CeilingLight> ceilingLights;
+    findCeilingLights(backroomsModel, backroomsPos, ceilingLights);
+    glm::vec3 localLampCenter = findLocalLampCenter(officeFurnitureModel);
+    std::vector<glm::vec3> deskLampPositions;
+    for (const Instance& instance : officeInstances)
+    {
+        glm::vec3 worldLampPos = glm::vec3(buildInstanceMatrix(instance) * glm::vec4(localLampCenter, 1.0f));
+        deskLampPositions.push_back(worldLampPos);
+    }
+
     // 9. Bucle de Renderizado
     while (!glfwWindowShouldClose(window)) {
         float currentFrame = glfwGetTime();
@@ -656,6 +755,113 @@ int main() {
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
         backroomsShader.use();
+
+        // Calcular las luces
+        backroomsShader.setVec3("viewPos", camera.Position);
+        backroomsShader.setFloat("shininess", 36.0f);
+        backroomsShader.setVec3("dirLight.direction", glm::vec3(-0.2f, -1.0f, -0.3f));
+
+        // FIX: Add a baseline global ambient glow to eliminate pitch-black zones
+        backroomsShader.setVec3("dirLight.ambient", glm::vec3(0.12f, 0.12f, 0.11f));
+
+        backroomsShader.setVec3("dirLight.diffuse", glm::vec3(0.0f));
+        backroomsShader.setVec3("dirLight.specular", glm::vec3(0.0f));
+        int lightIndex = 0;
+        // Ordenar luces de techo por distancia al jugador y subir las 40 mas cercanas
+        std::vector<size_t> sortedLightIndices(ceilingLights.size());
+        for (size_t i = 0; i < ceilingLights.size(); i++) sortedLightIndices[i] = i;
+        std::sort(sortedLightIndices.begin(), sortedLightIndices.end(), [&](size_t a, size_t b) {
+            return glm::distance(camera.Position, ceilingLights[a].position) < glm::distance(camera.Position, ceilingLights[b].position);
+        });
+
+
+        for (size_t si = 0; si < sortedLightIndices.size() && lightIndex < 100; si++)
+        {
+            size_t i = sortedLightIndices[si];
+            std::string base = "pointLights[" + std::to_string(lightIndex) + "].";
+            backroomsShader.setVec3(base + "position", ceilingLights[i].position);
+            backroomsShader.setFloat(base + "constant", 1.0f);
+            // FIX: Restore wider attenuation so the grid intersections blend together
+            backroomsShader.setFloat(base + "linear", 0.045f);
+            backroomsShader.setFloat(base + "quadratic", 0.0075f);
+
+            glm::vec3 diffuse(0.0f);
+            glm::vec3 specular(0.0f);
+            glm::vec3 ambient(0.0f);
+
+            if (ceilingLights[i].isOn)
+            {
+                float minDistance = 1e9f;
+                for (const Instance& demon : demonInstances)
+                {
+                    float d = glm::distance(ceilingLights[i].position, demon.position);
+                    if (d < minDistance)
+                    {
+                        minDistance = d;
+                    }
+                }
+                float monsterFactor = 1.0f;
+                if (minDistance < 15.0f)
+                {
+                    monsterFactor = glm::clamp((minDistance - 4.0f) / 11.0f, 0.15f, 1.0f);
+                }
+
+                glm::vec3 baseColor(0.9f, 0.88f, 0.82f);
+
+                // FIX: Lower the diffuse so the overlapping lights don't overexpose the textures
+                diffuse = baseColor * 0.22f * monsterFactor;
+                specular = baseColor * 0.05f * monsterFactor;
+
+                // FIX: Set per-light ambient to 0. The global dirLight handles shadows now!
+                ambient = glm::vec3(0.0f);
+
+                float distToCam = glm::distance(camera.Position, ceilingLights[i].position);
+                float distanceFade = 1.0f - glm::clamp((distToCam - 50.0f) / 15.0f, 0.0f, 1.0f);
+
+                diffuse *= distanceFade;
+                specular *= distanceFade;
+                ambient *= distanceFade;
+            }
+
+            backroomsShader.setVec3(base + "ambient", ambient);
+            backroomsShader.setVec3(base + "diffuse", diffuse);
+            backroomsShader.setVec3(base + "specular", specular);
+            lightIndex++;
+        }
+
+        for (size_t i = 0; i < deskLampPositions.size() && lightIndex < 120; i++)
+        {
+            std::string base = "pointLights[" + std::to_string(lightIndex) + "].";
+            backroomsShader.setVec3(base + "position", deskLampPositions[i]);
+            backroomsShader.setFloat(base + "constant", 1.0f);
+            // Atenuación equilibrada para un decaimiento más suave
+            backroomsShader.setFloat(base + "linear", 0.032f);
+            backroomsShader.setFloat(base + "quadratic", 0.003f);
+            backroomsShader.setVec3(base + "ambient", glm::vec3(0.08f, 0.02f, 0.1f));
+            backroomsShader.setVec3(base + "diffuse", glm::vec3(0.2f, 0.1f, 0.3f));
+            backroomsShader.setVec3(base + "specular", glm::vec3(0.2f, 0.1f, 0.3f));
+            lightIndex++;
+        }
+        backroomsShader.setInt("numActivePointLights", lightIndex);
+        backroomsShader.setVec3("spotLight.position", camera.Position);
+        backroomsShader.setVec3("spotLight.direction", camera.Front);
+        backroomsShader.setFloat("spotLight.cutOff", glm::cos(glm::radians(12.5f)));
+        backroomsShader.setFloat("spotLight.outerCutOff", glm::cos(glm::radians(17.5f)));
+        backroomsShader.setFloat("spotLight.constant", 1.0f);
+        backroomsShader.setFloat("spotLight.linear", 0.09f);
+        backroomsShader.setFloat("spotLight.quadratic", 0.032f);
+        if (flashlightOn)
+        {
+            backroomsShader.setVec3("spotLight.ambient", glm::vec3(0.0f));
+            backroomsShader.setVec3("spotLight.diffuse", glm::vec3(0.7f, 0.7f, 0.6f));
+            backroomsShader.setVec3("spotLight.specular", glm::vec3(0.7f, 0.7f, 0.6f));
+        }
+        else
+        {
+            backroomsShader.setVec3("spotLight.ambient", glm::vec3(0.0f));
+            backroomsShader.setVec3("spotLight.diffuse", glm::vec3(0.0f));
+            backroomsShader.setVec3("spotLight.specular", glm::vec3(0.0f));
+        }
 
         glm::mat4 projection = glm::perspective(glm::radians(camera.Zoom), (float)SCR_WIDTH / (float)SCR_HEIGHT, 0.1f, 100.0f);
         glm::mat4 view = camera.GetViewMatrix();
@@ -696,6 +902,9 @@ int main() {
 // CALLBACKS
 // ============================================================================
 
+// ============================================================================
+// PROCESAR ENTRADA
+// ============================================================================
 void processInput(GLFWwindow* window)
 {
     if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
@@ -709,6 +918,20 @@ void processInput(GLFWwindow* window)
         camera.ProcessKeyboard(LEFT, deltaTime, colManager);
     if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
         camera.ProcessKeyboard(RIGHT, deltaTime, colManager);
+
+    static bool fKeyWasPressed = false;
+    if (glfwGetKey(window, GLFW_KEY_F) == GLFW_PRESS)
+    {
+        if (!fKeyWasPressed)
+        {
+            flashlightOn = !flashlightOn;
+            fKeyWasPressed = true;
+        }
+    }
+    else if (glfwGetKey(window, GLFW_KEY_F) == GLFW_RELEASE)
+    {
+        fKeyWasPressed = false;
+    }
 }
 
 void framebuffer_size_callback(GLFWwindow* window, int width, int height)
