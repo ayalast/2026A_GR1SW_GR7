@@ -86,8 +86,8 @@ void main(){
     float distToCamera = length(viewPos - FragPos);
     
 
-    float fogStart = 20.0; 
-    float fogEnd = 80.0;   
+    float fogStart = 30.0; 
+    float fogEnd = 90.0;   
 
     
     float fogFactor = smoothstep(fogStart, fogEnd, distToCamera);
