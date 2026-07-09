@@ -762,7 +762,7 @@ int main() {
         backroomsShader.setVec3("dirLight.direction", glm::vec3(-0.2f, -1.0f, -0.3f));
 
         // FIX: Add a baseline global ambient glow to eliminate pitch-black zones
-        backroomsShader.setVec3("dirLight.ambient", glm::vec3(0.12f, 0.12f, 0.11f));
+        backroomsShader.setVec3("dirLight.ambient", glm::vec3(0.25f, 0.24f, 0.22f));
 
         backroomsShader.setVec3("dirLight.diffuse", glm::vec3(0.0f));
         backroomsShader.setVec3("dirLight.specular", glm::vec3(0.0f));
@@ -863,7 +863,7 @@ int main() {
             backroomsShader.setVec3("spotLight.specular", glm::vec3(0.0f));
         }
 
-        glm::mat4 projection = glm::perspective(glm::radians(camera.Zoom), (float)SCR_WIDTH / (float)SCR_HEIGHT, 0.1f, 100.0f);
+        glm::mat4 projection = glm::perspective(glm::radians(camera.Zoom), (float)SCR_WIDTH / (float)SCR_HEIGHT, 0.1f, 200.0f);
         glm::mat4 view = camera.GetViewMatrix();
         backroomsShader.setMat4("projection", projection);
         backroomsShader.setMat4("view", view);

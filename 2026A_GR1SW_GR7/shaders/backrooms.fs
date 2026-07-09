@@ -55,16 +55,26 @@ vec3 CalcSpotLight(SpotLight light, vec3 normal, vec3 fragPos, vec3 viewDir);
 void main(){ 
     vec3 norm = normalize(Normal);
     
-    // FIX: Flip the normal for back-facing polygons (like the ceiling plane)
-    // This forces the normal to point downwards so it catches the point lights.
-    if (!gl_FrontFacing) {
-        norm = -norm;
+    // Create a boolean to easily identify the ceiling
+    bool isCeiling = !gl_FrontFacing;
+    
+    if (isCeiling) {
+        norm = -norm; // Flip the normal so it catches point lights
     }
     
     vec3 viewDir = normalize(viewPos - FragPos);
 
+    // Calculate the global directional light first
     vec3 result = CalcDirLight(dirLight, norm, viewDir);
     
+    // FIX: Artificially boost the brightness ONLY for the ceiling
+    if (isCeiling) {
+        // Multiplies a constant brightness value by the ceiling's texture.
+        // Tweak the 0.35 value up or down depending on how bright you want the panels!
+        vec3 ceilingBoost = vec3(0.35) * vec3(texture(texture_diffuse1, TexCoords));
+        result += ceilingBoost;
+    }
+
     int lightsToCount = numActivePointLights;
     if (lightsToCount > NR_POINT_LIGHTS) {
         lightsToCount = NR_POINT_LIGHTS;
