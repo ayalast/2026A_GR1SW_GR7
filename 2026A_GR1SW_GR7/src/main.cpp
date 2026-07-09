@@ -761,9 +761,8 @@ int main() {
         backroomsShader.setFloat("shininess", 36.0f);
         backroomsShader.setVec3("dirLight.direction", glm::vec3(-0.2f, -1.0f, -0.3f));
 
-        backroomsShader.setVec3("dirLight.ambient", glm::vec3(0.05f, 0.05f, 0.05f));
-
-        backroomsShader.setVec3("dirLight.diffuse", glm::vec3(0.05f, 0.05f, 0.05f));
+        backroomsShader.setVec3("dirLight.ambient", glm::vec3(0.12f, 0.11f, 0.10f)); 
+        backroomsShader.setVec3("dirLight.diffuse", glm::vec3(0.18f, 0.18f, 0.16f)); 
         backroomsShader.setVec3("dirLight.specular", glm::vec3(0.2f, 0.2f, 0.2f));
         int lightIndex = 0;
 
@@ -780,10 +779,9 @@ int main() {
             size_t i = sortedLightIndices[si];
             std::string base = "pointLights[" + std::to_string(lightIndex) + "].";
             backroomsShader.setVec3(base + "position", ceilingLights[i].position);
-            backroomsShader.setFloat(base + "constant", 1.0f);
-            // FIX: Restore wider attenuation so the grid intersections blend together
-            backroomsShader.setFloat(base + "linear", 0.045f);
-            backroomsShader.setFloat(base + "quadratic", 0.0075f);
+            backroomsShader.setFloat(base + "constant", 0.6f); 
+            backroomsShader.setFloat(base + "linear", 0.025f);  
+            backroomsShader.setFloat(base + "quadratic", 0.003f); 
 
             glm::vec3 diffuse(0.0f);
             glm::vec3 specular(0.0f);

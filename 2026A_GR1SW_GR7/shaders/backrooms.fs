@@ -66,7 +66,9 @@ void main(){
     vec3 result = CalcDirLight(dirLight, norm, viewDir);
     
     if (isCeiling) {
-        result *= 1.25;
+        result *= 1.6f; 
+       
+        result += vec3(0.05) * vec3(texture(texture_diffuse1, TexCoords));
     }
 
     int lightsToCount = numActivePointLights;
@@ -83,16 +85,16 @@ void main(){
 
     float distToCamera = length(viewPos - FragPos);
     
-    // Sustituye tu código actual de fog por esto:
-    float fogStart = 15.0; // Empezamos a oscurecer antes pero muy suavemente
-    float fogEnd = 50.0;   // Llegamos a la oscuridad total más lejos
 
-    // smoothstep hace que la transición sea orgánica, no un corte repentino
+    float fogStart = 20.0; 
+    float fogEnd = 80.0;   
+
+    
     float fogFactor = smoothstep(fogStart, fogEnd, distToCamera);
 
     vec3 darknessColor = vec3(0.0f, 0.0f, 0.0f); 
     result = mix(result, darknessColor, fogFactor);
-    // ===================================================
+
     
     FragColor = vec4(result, 1.0);  
 }
