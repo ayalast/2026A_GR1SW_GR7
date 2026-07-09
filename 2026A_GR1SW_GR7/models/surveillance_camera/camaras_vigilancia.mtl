@@ -9,6 +9,7 @@ Ni 1.500000
 d 1.000000
 illum 2
 map_Kd Bolts_baseColor.png
+map_Ks Bolts_metallicRoughness.png
 map_Ke Bolts_emissive.png
 map_Bump -bm 1.000000 Bolts_normal.png
 
@@ -20,6 +21,7 @@ Ni 1.500000
 d 1.000000
 illum 2
 map_Kd Cam_Attachments_baseColor.png
+map_Ks Cam_Attachments_metallicRoughness.png
 map_Ke Cam_Attachments_emissive.png
 map_Bump -bm 1.000000 Cam_Attachments_normal.png
 
@@ -31,6 +33,7 @@ Ni 1.500000
 d 1.000000
 illum 2
 map_Kd Cam_Body_baseColor.png
+map_Ks Cam_Body_metallicRoughness.png
 map_Ke Cam_Body_emissive.png
 map_Bump -bm 1.000000 Cam_Body_normal.png
 
@@ -42,6 +45,7 @@ Ni 1.500000
 d 1.000000
 illum 2
 map_Kd Cam_Cover_baseColor.png
+map_Ks Cam_Cover_metallicRoughness.png
 map_Ke Cam_Cover_emissive.png
 map_Bump -bm 1.000000 Cam_Cover_normal.png
 
@@ -53,6 +57,7 @@ Ni 1.500000
 d 1.000000
 illum 2
 map_Kd Cam_FrontBack_baseColor.png
+map_Ks Cam_FrontBack_metallicRoughness.png
 map_Ke Cam_FrontBack_emissive.png
 map_Bump -bm 1.000000 Cam_FrontBack_normal.png
 
@@ -64,6 +69,7 @@ Ni 1.500000
 d 1.000000
 illum 2
 map_Kd Cord_baseColor.png
+map_Ks Cord_metallicRoughness.png
 map_Ke Cord_emissive.png
 map_Bump -bm 1.000000 Cord_normal.png
 
@@ -75,6 +81,7 @@ Ni 1.500000
 d 1.000000
 illum 2
 map_Kd Glass_baseColor.png
+map_Ks Glass_metallicRoughness.png
 map_Ke Glass_emissive.png
 
 newmtl Wall
@@ -85,6 +92,7 @@ Ni 1.500000
 d 1.000000
 illum 2
 map_Kd Wall_baseColor.png
+map_Ks Wall_metallicRoughness.png
 map_Ke Wall_emissive.png
 map_Bump -bm 1.000000 Wall_normal.png
 
@@ -96,6 +104,7 @@ Ni 1.500000
 d 1.000000
 illum 2
 map_Kd WallAttach_baseColor.png
+map_Ks WallAttach_metallicRoughness.png
 map_Ke WallAttach_emissive.png
 map_Bump -bm 1.000000 WallAttach_normal.png
 
@@ -107,5 +116,6 @@ Ni 1.500000
 d 1.000000
 illum 2
 map_Kd material_baseColor.png
+map_Ks material_metallicRoughness.png
 map_Ke material_emissive.png
 map_Bump -bm 1.000000 material_normal.png

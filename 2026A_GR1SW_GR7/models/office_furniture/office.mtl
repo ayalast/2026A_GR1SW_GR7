@@ -10,6 +10,7 @@ Ni 1.500000
 d 1.000000
 illum 2
 map_Kd mat_books_baseColor.png
+map_Ks mat_books_metallicRoughness.png
 map_Bump -bm 1.000000 mat_books_normal.png
 
 newmtl mat_cabinets
@@ -21,6 +22,7 @@ Ni 1.500000
 d 1.000000
 illum 2
 map_Kd mat_cabinets_baseColor.png
+map_Ks mat_cabinets_metallicRoughness.png
 
 newmtl mat_desk_wood
 Ns 250.000000
@@ -31,6 +33,7 @@ Ni 1.500000
 d 1.000000
 illum 2
 map_Kd mat_desk_wood_baseColor.png
+map_Ks mat_desk_wood_metallicRoughness.png
 map_Bump -bm 1.000000 mat_desk_wood_normal.png
 
 newmtl mat_lantern_flame
@@ -52,6 +55,7 @@ Ni 1.500000
 d 1.000000
 illum 2
 map_Kd mat_oillamp_opaque_baseColor.png
+map_Ks mat_oillamp_opaque_metallicRoughness.png
 map_Bump -bm 1.000000 mat_oillamp_opaque_normal.png
 
 newmtl mat_oillamp_transp

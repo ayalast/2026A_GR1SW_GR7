@@ -78,6 +78,7 @@ public:
             // and finally bind the texture
             glBindTexture(GL_TEXTURE_2D, textures[i].id);
         }
+        shader.setBool("use_specular_map", specularNr > 1);
         
         // draw mesh
         glBindVertexArray(VAO);

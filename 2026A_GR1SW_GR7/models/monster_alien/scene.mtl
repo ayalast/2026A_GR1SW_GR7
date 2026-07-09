@@ -10,4 +10,5 @@ Ni 1.500000
 d 1.000000
 illum 2
 map_Kd Material_baseColor.png
+map_Ks Material_specularf0.png
 map_Bump -bm 1.000000 Material_normal.png
