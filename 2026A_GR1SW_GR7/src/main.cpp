@@ -588,7 +588,7 @@ int main() {
     const AABB officeBounds = computeModelBounds(officeFurnitureModel);
     const std::vector<glm::vec3> officeAnchors = {
         glm::vec3(roomCenter.x - 40.0f, 0.0f, roomCenter.z - 24.0f),
-        glm::vec3(roomCenter.x + 32.0f, 0.0f, roomCenter.z - 20.0f),
+        glm::vec3(roomCenter.x + 12.0f, 0.0f, roomCenter.z - 20.0f),
         glm::vec3(roomCenter.x - 55.0f, 0.0f, roomCenter.z + 32.0f),
         glm::vec3(roomCenter.x + 24.0f, 0.0f, roomCenter.z + 22.0f)
     };
@@ -614,7 +614,7 @@ int main() {
         glm::vec3(roomWorldBounds.min.x + 28.0f, 0.0f, roomWorldBounds.min.z + 30.0f)
     };
     const std::vector<float> demonYaws = { 45.0f, -135.0f };
-    const std::vector<Instance> demonInstances = createFloorInstances(demonAnchors, roomWorldBounds, demonBounds, floorY, 0.008f, demonYaws, 0.45f);
+    const std::vector<Instance> demonInstances = createFloorInstances(demonAnchors, roomWorldBounds, demonBounds, floorY, 1.8f, demonYaws, 0.45f);
 
     // Computadoras
     const AABB computerBounds = computeModelBounds(sciFiComputerModel);

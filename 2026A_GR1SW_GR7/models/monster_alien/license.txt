@@ -1,11 +1,11 @@
 Model Information:
-* title:	Demon
-* source:	https://sketchfab.com/3d-models/demon-7e7435c569574e09a7d887a581b589ce
-* author:	sanyaork (https://sketchfab.com/sanyaork)
+* title:	GMOD - Bacteria Pill (Backrooms)
+* source:	https://sketchfab.com/3d-models/gmod-bacteria-pill-backrooms-d73cd637ecb349b4938dfa52e1924285
+* author:	dedwerd... (https://sketchfab.com/dedwerd_)
 
 Model License:
 * license type:	CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
 * requirements:	Author must be credited. Commercial use is allowed.
 
 If you use this 3D model in your project be sure to copy paste this credit wherever you share it:
-This work is based on "Demon" (https://sketchfab.com/3d-models/demon-7e7435c569574e09a7d887a581b589ce) by sanyaork (https://sketchfab.com/sanyaork) licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
+This work is based on "GMOD - Bacteria Pill (Backrooms)" (https://sketchfab.com/3d-models/gmod-bacteria-pill-backrooms-d73cd637ecb349b4938dfa52e1924285) by dedwerd... (https://sketchfab.com/dedwerd_) licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
