@@ -545,7 +545,7 @@ void findCeilingLights(const Model& model, const glm::vec3& worldOffset, std::ve
             CeilingLight cl;
             cl.position = glm::vec3(x, ceilY, z);
             // Solo 5% de probabilidad de que una luz este apagada
-            cl.isOn = roll(rng) > 0.05f;
+            cl.isOn = roll(rng) > 0.30f;
             lights.push_back(cl);
         }
     }
@@ -761,11 +761,10 @@ int main() {
         backroomsShader.setFloat("shininess", 36.0f);
         backroomsShader.setVec3("dirLight.direction", glm::vec3(-0.2f, -1.0f, -0.3f));
 
-        // FIX: Add a baseline global ambient glow to eliminate pitch-black zones
-        backroomsShader.setVec3("dirLight.ambient", glm::vec3(0.25f, 0.24f, 0.22f));
+        backroomsShader.setVec3("dirLight.ambient", glm::vec3(0.02f, 0.02f, 0.02f));
 
-        backroomsShader.setVec3("dirLight.diffuse", glm::vec3(0.0f));
-        backroomsShader.setVec3("dirLight.specular", glm::vec3(0.0f));
+        backroomsShader.setVec3("dirLight.diffuse", glm::vec3(0.05f, 0.05f, 0.05f));
+        backroomsShader.setVec3("dirLight.specular", glm::vec3(0.2f, 0.2f, 0.2f));
         int lightIndex = 0;
 
         // Ordenar luces de techo por distancia al jugador y subir las 40 mas cercanas
@@ -849,8 +848,8 @@ int main() {
         backroomsShader.setFloat("spotLight.cutOff", glm::cos(glm::radians(12.5f)));
         backroomsShader.setFloat("spotLight.outerCutOff", glm::cos(glm::radians(17.5f)));
         backroomsShader.setFloat("spotLight.constant", 1.0f);
-        backroomsShader.setFloat("spotLight.linear", 0.09f);
-        backroomsShader.setFloat("spotLight.quadratic", 0.032f);
+        backroomsShader.setFloat("spotLight.linear", 0.045f);    
+        backroomsShader.setFloat("spotLight.quadratic", 0.015f); 
         if (flashlightOn)
         {
             backroomsShader.setVec3("spotLight.ambient", glm::vec3(0.0f));

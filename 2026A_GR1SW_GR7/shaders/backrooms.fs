@@ -84,12 +84,11 @@ void main(){
     
     result += CalcSpotLight(spotLight, norm, FragPos, viewDir);    
     
-    // === NUEVO: OSCURIDAD POR DISTANCIA (FOG/NIEBLA) ===
-    // Calculamos qué tan lejos está el píxel de la cámara
+
     float distToCamera = length(viewPos - FragPos);
     
-    float fogStart = 25.0; // Distancia a la que empieza a oscurecerse (ajusta a tu gusto)
-    float fogEnd = 70.0;   // Distancia a la que ya es oscuridad total (ajusta a tu gusto)
+    float fogStart = 10.0; 
+    float fogEnd = 40.0;   
     
     // clamp limita el valor entre 0.0 y 1.0
     float fogFactor = clamp((distToCamera - fogStart) / (fogEnd - fogStart), 0.0, 1.0);
