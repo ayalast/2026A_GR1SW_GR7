@@ -55,22 +55,18 @@ vec3 CalcSpotLight(SpotLight light, vec3 normal, vec3 fragPos, vec3 viewDir);
 void main(){ 
     vec3 norm = normalize(Normal);
     
-    // Identificar el techo
     bool isCeiling = !gl_FrontFacing;
     
     if (isCeiling) {
-        norm = -norm; // Voltear la normal del techo
+        norm = -norm; 
     }
     
     vec3 viewDir = normalize(viewPos - FragPos);
 
-    // Calcular luz global
     vec3 result = CalcDirLight(dirLight, norm, viewDir);
     
-    // Extra de brillo solo para el techo
     if (isCeiling) {
-        vec3 ceilingBoost = vec3(0.35) * vec3(texture(texture_diffuse1, TexCoords));
-        result += ceilingBoost;
+        result *= 1.25;
     }
 
     int lightsToCount = numActivePointLights;
@@ -87,16 +83,14 @@ void main(){
 
     float distToCamera = length(viewPos - FragPos);
     
-    float fogStart = 10.0; 
-    float fogEnd = 40.0;   
-    
-    // clamp limita el valor entre 0.0 y 1.0
-    float fogFactor = clamp((distToCamera - fogStart) / (fogEnd - fogStart), 0.0, 1.0);
-    
-    // El color con el que se va a mezclar (Negro profundo)
+    // Sustituye tu código actual de fog por esto:
+    float fogStart = 15.0; // Empezamos a oscurecer antes pero muy suavemente
+    float fogEnd = 50.0;   // Llegamos a la oscuridad total más lejos
+
+    // smoothstep hace que la transición sea orgánica, no un corte repentino
+    float fogFactor = smoothstep(fogStart, fogEnd, distToCamera);
+
     vec3 darknessColor = vec3(0.0f, 0.0f, 0.0f); 
-    
-    // Mezclamos el resultado final con la oscuridad basándonos en la distancia
     result = mix(result, darknessColor, fogFactor);
     // ===================================================
     
