@@ -451,6 +451,44 @@ std::vector<Instance> generatePhoneBooths(const AABB& roomBounds, const AABB& bo
 // FUNCIONES DE DIBUJADO
 // ============================================================================
 
+void drawPlanarShadows(Shader& shadowShader, Model& model, const std::vector<Instance>& instances, float floorY, glm::vec3 lightDir, bool firstMeshOnly = false)
+{
+    // Crear la matriz de proyección de sombra plana para GLM (Column-Major)
+    glm::mat4 shadowMat(1.0f);
+
+    // Evitar la división por cero si la luz apunta completamente horizontal
+    if (std::abs(lightDir.y) < 0.001f) lightDir.y = -0.001f;
+
+    // Columna 1 de la matriz: Proyecta la altura (Y) hacia los lados dependiendo de la inclinación de la luz
+    shadowMat[1][0] = -lightDir.x / lightDir.y;
+    shadowMat[1][1] = 0.0f;
+    shadowMat[1][2] = -lightDir.z / lightDir.y;
+
+    // Columna 3 de la matriz: Traslada la sombra proyectada al nivel exacto del suelo
+    shadowMat[3][0] = floorY * (lightDir.x / lightDir.y);
+    shadowMat[3][1] = floorY + 0.002f; // Offset milimétrico para evitar Z-Fighting (parpadeo de texturas)
+    shadowMat[3][2] = floorY * (lightDir.z / lightDir.y);
+
+    for (const Instance& instance : instances)
+    {
+        // Matriz de transformación original de la instancia de objeto
+        glm::mat4 modelMat = buildInstanceMatrix(instance);
+
+        // La matriz final combina la proyección de sombra con la posición del objeto
+        shadowShader.setMat4("model", shadowMat * modelMat);
+
+        if (firstMeshOnly)
+        {
+            if (!model.meshes.empty())
+                model.meshes[0].Draw(shadowShader);
+        }
+        else
+        {
+            model.Draw(shadowShader);
+        }
+    }
+}
+
 void drawInstances(Shader& shader, Model& model, const std::vector<Instance>& instances, bool firstMeshOnly = false)
 {
     for (const Instance& instance : instances)
@@ -518,48 +556,42 @@ struct CeilingLight
     bool isOn;
 };
 
-
 // ============================================================================
-// GENERAR LUCES DE TECHO EN CUADRICULA
+// GENERAR LUCES DE TECHO EN CUADRICULA (CON CALIBRACIÓN)
 // ============================================================================
 void findCeilingLights(const Model& model, const glm::vec3& worldOffset, std::vector<CeilingLight>& lights)
 {
     std::random_device rd;
     std::mt19937 rng(rd());
     std::uniform_real_distribution<float> roll(0.0f, 1.0f);
-    // El techo (Material.005) es un quad plano con UV de paneles, no geometria individual.
-    // Generamos luces en cuadricula sobre los limites reales del mapa.
-    // Bounds del quad de techo segun el OBJ + worldOffset
+
+    // === VARIABLES DE CALIBRACIÓN ===
+    // Modifica estos números (pueden ser positivos o negativos) para mover toda la cuadrícula
+    float offsetX = 2.9f;   // <- Incrementa o disminuye para mover las luces en el eje X
+    float offsetZ = -2.3f;  // <- Incrementa o disminuye para mover las luces en el eje Z
+
+    float spacingX = 6.0f; // Espaciado en X entre lámparas
+    float spacingZ = 8.0f; // Espaciado en Z entre lámparas
+    // ================================
+
     float xMin = -182.4f + worldOffset.x;
-    float xMax =  194.8f + worldOffset.x;
+    float xMax = 194.8f + worldOffset.x;
     float zMin = -185.7f + worldOffset.z;
-    float zMax =  191.5f + worldOffset.z;
-    // La luz se coloca 1.2 unidades debajo del panel para iluminar el techo desde abajo
+    float zMax = 191.5f + worldOffset.z;
+
     float ceilY = 8.565f + worldOffset.y - 1.2f;
-    // Espaciado entre luces: ~12 unidades para coincidir con los paneles de la textura
-    float spacing = 12.0f;
-    for (float x = xMin + spacing * 0.5f; x < xMax; x += spacing)
+
+    for (float x = xMin + spacingX * 0.5f + offsetX; x < xMax; x += spacingX)
     {
-        for (float z = zMin + spacing * 0.5f; z < zMax; z += spacing)
+        for (float z = zMin + spacingZ * 0.5f + offsetZ; z < zMax; z += spacingZ)
         {
             CeilingLight cl;
             cl.position = glm::vec3(x, ceilY, z);
-            // Solo 5% de probabilidad de que una luz este apagada
             cl.isOn = roll(rng) > 0.40f;
             lights.push_back(cl);
         }
     }
     std::cout << "Ceiling lights generated: " << lights.size() << std::endl;
-    // Registrar en archivo para diagnostico
-    std::ofstream diagFile("ceiling_lights_diag.txt");
-    if (diagFile.is_open())
-    {
-        diagFile << "Total ceiling lights: " << lights.size() << "\n";
-        for (size_t i = 0; i < lights.size() && i < 20; i++)
-        {
-            diagFile << "Light " << i << ": pos=(" << lights[i].position.x << "," << lights[i].position.y << "," << lights[i].position.z << ") on=" << lights[i].isOn << "\n";
-        }
-    }
 }
 
 
@@ -606,6 +638,7 @@ int main() {
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+    glfwWindowHint(GLFW_STENCIL_BITS, 8);
 
     // 2. Crear ventana
     GLFWwindow* window = glfwCreateWindow(800, 600, "Prueba de Entorno - Grupo", NULL, NULL);
@@ -758,10 +791,10 @@ int main() {
 
         // Calcular las luces
         backroomsShader.setVec3("viewPos", camera.Position);
-        backroomsShader.setFloat("shininess", 36.0f);
+        backroomsShader.setFloat("shininess", 30.0f);
         backroomsShader.setVec3("dirLight.direction", glm::vec3(-0.2f, -1.0f, -0.3f));
 
-        backroomsShader.setVec3("dirLight.ambient", glm::vec3(0.12f, 0.11f, 0.10f)); 
+        backroomsShader.setVec3("dirLight.ambient", glm::vec3(0.0f, 0.0f, 0.0f)); 
         backroomsShader.setVec3("dirLight.diffuse", glm::vec3(0.18f, 0.18f, 0.16f)); 
         backroomsShader.setVec3("dirLight.specular", glm::vec3(0.2f, 0.2f, 0.2f));
         int lightIndex = 0;
@@ -779,9 +812,9 @@ int main() {
             size_t i = sortedLightIndices[si];
             std::string base = "pointLights[" + std::to_string(lightIndex) + "].";
             backroomsShader.setVec3(base + "position", ceilingLights[i].position);
-            backroomsShader.setFloat(base + "constant", 0.6f); 
-            backroomsShader.setFloat(base + "linear", 0.025f);  
-            backroomsShader.setFloat(base + "quadratic", 0.003f); 
+            backroomsShader.setFloat(base + "constant", 1.0f);   
+            backroomsShader.setFloat(base + "linear", 0.05f);
+            backroomsShader.setFloat(base + "quadratic", 0.003f);
 
             glm::vec3 diffuse(0.0f);
             glm::vec3 specular(0.0f);
@@ -833,9 +866,13 @@ int main() {
             backroomsShader.setVec3(base + "position", deskLampPositions[i]);
             backroomsShader.setFloat(base + "constant", 1.0f);
             // Atenuación equilibrada para un decaimiento más suave
-            backroomsShader.setFloat(base + "linear", 0.032f);
-            backroomsShader.setFloat(base + "quadratic", 0.003f);
+
+            backroomsShader.setFloat(base + "linear", 0.1f);
+            backroomsShader.setFloat(base + "quadratic", 0.15f);
+
             backroomsShader.setVec3(base + "ambient", glm::vec3(0.08f, 0.02f, 0.1f));
+
+
             backroomsShader.setVec3(base + "diffuse", glm::vec3(0.2f, 0.1f, 0.3f));
             backroomsShader.setVec3(base + "specular", glm::vec3(0.2f, 0.1f, 0.3f));
             lightIndex++;
@@ -880,6 +917,53 @@ int main() {
         drawInstances(backroomsShader, monsterAlienModel, demonInstances);
         drawInstances(backroomsShader, sciFiComputerModel, computerInstances);
         drawInstances(backroomsShader, publicPhoneBoothModel, boothInstances);
+
+
+        // ============================================================================
+        // === OPTIMIZACIÓN Y CORRECCIÓN DE SOMBRAS CON STENCIL BUFFER ===
+        // ============================================================================
+        glm::vec3 lightDirection(-0.2f, -1.0f, -0.3f);
+
+        // 1. Limpiar el stencil buffer al inicio del frame junto con los demás
+        // (Asegúrate de agregar | GL_STENCIL_BUFFER_BIT arriba en tu glClear, o hazlo aquí:)
+        glClear(GL_STENCIL_BUFFER_BIT);
+
+        cubeShader.use();
+        cubeShader.setMat4("projection", projection);
+        cubeShader.setMat4("view", view);
+
+        // Activamos los estados necesarios de OpenGL
+        glEnable(GL_BLEND);
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+        glEnable(GL_STENCIL_TEST);
+
+        // CONFIGURACIÓN DEL STENCIL:
+        // No importa si las sombras se cruzan, solo se dibujará en los píxeles donde el valor sea 0.
+        // Cuando se dibuje un píxel de sombra, incrementará el stencil a 1.
+        glStencilFunc(GL_EQUAL, 0, 0xFF);
+        glStencilOp(GL_KEEP, GL_KEEP, GL_INCR);
+
+        // Desactivamos la escritura en el Depth Buffer temporalmente 
+        // para que las sombras transparentes no bloqueen el dibujado entre sí
+        glDepthMask(GL_FALSE);
+
+        // Color de la sombra con su canal Alpha (transparencia)
+        cubeShader.setVec4("cubeColor", glm::vec4(0.0f, 0.0f, 0.0f, 0.50f));
+
+        // Dibujamos las sombras normalmente. El Stencil Buffer se encargará de que
+        // si dos sombras se solapan, el color NO se duplique ni parpadee.
+        drawPlanarShadows(cubeShader, officeFurnitureModel, officeInstances, floorY, lightDirection);
+        drawPlanarShadows(cubeShader, oldPaperBoxesModel, boxesInstances, floorY, lightDirection, true);
+        drawPlanarShadows(cubeShader, monsterAlienModel, demonInstances, floorY, lightDirection);
+        drawPlanarShadows(cubeShader, sciFiComputerModel, computerInstances, floorY, lightDirection);
+        drawPlanarShadows(cubeShader, publicPhoneBoothModel, boothInstances, floorY, lightDirection);
+
+        // RESTAURAR ESTADOS ORIGINALES DE OPENGL (Muy importante)
+        glDepthMask(GL_TRUE);
+        glDisable(GL_STENCIL_TEST);
+        glDisable(GL_BLEND);
+
+        // ============================================================================
 
         // Opcional: mostrar cajas de colisión
         // cubeShader.use();

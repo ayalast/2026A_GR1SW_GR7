@@ -63,13 +63,10 @@ void main(){
     
     vec3 viewDir = normalize(viewPos - FragPos);
 
+    // 1. Calculamos la luz base de la escena
     vec3 result = CalcDirLight(dirLight, norm, viewDir);
     
-    if (isCeiling) {
-        result *= 1.6f; 
-       
-        result += vec3(0.05) * vec3(texture(texture_diffuse1, TexCoords));
-    }
+    // [ELIMINADO DE AQUÍ EL result *= 3.5f]
 
     int lightsToCount = numActivePointLights;
     if (lightsToCount > NR_POINT_LIGHTS) {
@@ -82,19 +79,25 @@ void main(){
     
     result += CalcSpotLight(spotLight, norm, FragPos, viewDir);    
     
+    // === NUEVO: MANDAMOS EL BOOST DEL TECHO AL FINAL DE LAS LUCES ===
+    if (isCeiling) {
+        // Multiplica el efecto de todas las luces juntas (un 40% más)
+        result *= 1.4f; 
+        
+        // Le añade un brillo constante simulando la auto-emisión de los tubos de luz
+        // Ajusta el 0.30f si quieres que el techo brille más o menos por sí mismo
+        result += vec3(0.30f) * vec3(texture(texture_diffuse1, TexCoords));
+    }
+    // ===============================================================
 
+    // Lógica de la niebla (Fog) intacta
     float distToCamera = length(viewPos - FragPos);
-    
-
-    float fogStart = 30.0; 
-    float fogEnd = 90.0;   
-
-    
+    float fogStart = 100.0; 
+    float fogEnd = 200.0;   
     float fogFactor = smoothstep(fogStart, fogEnd, distToCamera);
 
     vec3 darknessColor = vec3(0.0f, 0.0f, 0.0f); 
     result = mix(result, darknessColor, fogFactor);
-
     
     FragColor = vec4(result, 1.0);  
 }
