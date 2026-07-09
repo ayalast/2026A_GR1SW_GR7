@@ -55,22 +55,20 @@ vec3 CalcSpotLight(SpotLight light, vec3 normal, vec3 fragPos, vec3 viewDir);
 void main(){ 
     vec3 norm = normalize(Normal);
     
-    // Create a boolean to easily identify the ceiling
+    // Identificar el techo
     bool isCeiling = !gl_FrontFacing;
     
     if (isCeiling) {
-        norm = -norm; // Flip the normal so it catches point lights
+        norm = -norm; // Voltear la normal del techo
     }
     
     vec3 viewDir = normalize(viewPos - FragPos);
 
-    // Calculate the global directional light first
+    // Calcular luz global
     vec3 result = CalcDirLight(dirLight, norm, viewDir);
     
-    // FIX: Artificially boost the brightness ONLY for the ceiling
+    // Extra de brillo solo para el techo
     if (isCeiling) {
-        // Multiplies a constant brightness value by the ceiling's texture.
-        // Tweak the 0.35 value up or down depending on how bright you want the panels!
         vec3 ceilingBoost = vec3(0.35) * vec3(texture(texture_diffuse1, TexCoords));
         result += ceilingBoost;
     }
@@ -85,6 +83,23 @@ void main(){
     }
     
     result += CalcSpotLight(spotLight, norm, FragPos, viewDir);    
+    
+    // === NUEVO: OSCURIDAD POR DISTANCIA (FOG/NIEBLA) ===
+    // Calculamos qué tan lejos está el píxel de la cámara
+    float distToCamera = length(viewPos - FragPos);
+    
+    float fogStart = 25.0; // Distancia a la que empieza a oscurecerse (ajusta a tu gusto)
+    float fogEnd = 70.0;   // Distancia a la que ya es oscuridad total (ajusta a tu gusto)
+    
+    // clamp limita el valor entre 0.0 y 1.0
+    float fogFactor = clamp((distToCamera - fogStart) / (fogEnd - fogStart), 0.0, 1.0);
+    
+    // El color con el que se va a mezclar (Negro profundo)
+    vec3 darknessColor = vec3(0.0f, 0.0f, 0.0f); 
+    
+    // Mezclamos el resultado final con la oscuridad basándonos en la distancia
+    result = mix(result, darknessColor, fogFactor);
+    // ===================================================
     
     FragColor = vec4(result, 1.0);  
 }

@@ -751,7 +751,7 @@ int main() {
 
         processInput(window);
 
-        glClearColor(0.2f, 0.2f, 0.2f, 1.0f);
+        glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
         backroomsShader.use();
@@ -767,6 +767,7 @@ int main() {
         backroomsShader.setVec3("dirLight.diffuse", glm::vec3(0.0f));
         backroomsShader.setVec3("dirLight.specular", glm::vec3(0.0f));
         int lightIndex = 0;
+
         // Ordenar luces de techo por distancia al jugador y subir las 40 mas cercanas
         std::vector<size_t> sortedLightIndices(ceilingLights.size());
         for (size_t i = 0; i < ceilingLights.size(); i++) sortedLightIndices[i] = i;
