@@ -27,3 +27,9 @@ void AudioBgm_Update(float deltaTime);
 
 // SFX one-shot (ej. linterna on/off). Misma pista se puede re-disparar.
 bool AudioBgm_PlaySfx(const char* path, float volume = 0.85f);
+
+// Loop de proximidad (monstruo). Cargar una vez; cada frame setear volumen 0..1.
+// El archivo suele ser muy fuerte: usa volumen max muy bajo (ej. 0.04).
+bool AudioBgm_ProximityLoad(const char* path);
+void AudioBgm_ProximitySetVolume(float volume); // 0 = silencio (sigue en loop o se pausa)
+void AudioBgm_ProximityStop();

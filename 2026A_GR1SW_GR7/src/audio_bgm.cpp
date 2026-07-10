@@ -19,6 +19,11 @@ static ma_sound  g_sfx[SFX_POOL];
 static bool      g_sfxReady[SFX_POOL] = {};
 static int       g_sfxNext = 0;
 
+// Loop de proximidad (entidad): volumen se actualiza por distancia
+static ma_sound  g_prox;
+static bool      g_proxReady = false;
+static bool      g_proxPlaying = false;
+
 static char  g_path[512] = {};
 static float g_menuVolume = 0.045f;
 static float g_gameVolume = 0.0225f; // mitad del volumen de carga/menu
@@ -148,6 +153,13 @@ void AudioBgm_Shutdown()
             ma_sound_uninit(&g_sfx[i]);
             g_sfxReady[i] = false;
         }
+    }
+    if (g_proxReady)
+    {
+        ma_sound_stop(&g_prox);
+        ma_sound_uninit(&g_prox);
+        g_proxReady = false;
+        g_proxPlaying = false;
     }
     if (g_soundReady)
     {
@@ -353,4 +365,89 @@ bool AudioBgm_PlaySfx(const char* path, float volume)
     }
 
     return true;
+}
+
+bool AudioBgm_ProximityLoad(const char* path)
+{
+    if (!path || !path[0])
+        return false;
+
+    if (!g_engineReady)
+    {
+        if (!AudioBgm_Init())
+            return false;
+    }
+
+    if (g_proxReady)
+    {
+        ma_sound_stop(&g_prox);
+        ma_sound_uninit(&g_prox);
+        g_proxReady = false;
+        g_proxPlaying = false;
+    }
+
+    ma_result result = ma_sound_init_from_file(
+        &g_engine,
+        path,
+        MA_SOUND_FLAG_STREAM,
+        NULL,
+        NULL,
+        &g_prox);
+
+    if (result != MA_SUCCESS)
+    {
+        std::cout << "[Audio] No se pudo cargar proximidad: " << path
+                  << " (codigo " << (int)result << ")\n";
+        return false;
+    }
+
+    ma_sound_set_looping(&g_prox, MA_TRUE);
+    ma_sound_set_volume(&g_prox, 0.0f);
+    g_proxReady = true;
+    g_proxPlaying = false;
+    std::cout << "[Audio] Proximidad entidad cargada (loop, vol por distancia): " << path << "\n";
+    return true;
+}
+
+void AudioBgm_ProximitySetVolume(float volume)
+{
+    if (!g_proxReady)
+        return;
+
+    if (volume < 0.0f) volume = 0.0f;
+    if (volume > 1.0f) volume = 1.0f;
+
+    // Umbral muy bajo: el archivo es desproporcionadamente fuerte
+    const float startThreshold = 0.0008f;
+
+    if (volume < startThreshold)
+    {
+        ma_sound_set_volume(&g_prox, 0.0f);
+        if (g_proxPlaying)
+        {
+            ma_sound_stop(&g_prox);
+            g_proxPlaying = false;
+        }
+        return;
+    }
+
+    ma_sound_set_volume(&g_prox, volume);
+    if (!g_proxPlaying)
+    {
+        ma_sound_seek_to_pcm_frame(&g_prox, 0);
+        ma_result result = ma_sound_start(&g_prox);
+        if (result == MA_SUCCESS)
+            g_proxPlaying = true;
+        else
+            std::cout << "[Audio] No se pudo start proximidad (" << (int)result << ")\n";
+    }
+}
+
+void AudioBgm_ProximityStop()
+{
+    if (!g_proxReady)
+        return;
+    ma_sound_set_volume(&g_prox, 0.0f);
+    ma_sound_stop(&g_prox);
+    g_proxPlaying = false;
 }

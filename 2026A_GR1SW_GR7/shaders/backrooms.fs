@@ -144,10 +144,10 @@ void main()
         result *= (1.0 - ceilExtinct * 0.88);
     }
 
-    // Fill casi nulo: sin esto las dark zones nunca llegan a negro total (linterna)
+    // Fill minimo: dark zones casi negro; lit brilla por point lights (no por fill)
     if (!isCeiling)
     {
-        float fill = isFloor ? 0.0025 : 0.0015;
+        float fill = isFloor ? 0.004 : 0.0035;
         result += albedo * fill;
     }
 
