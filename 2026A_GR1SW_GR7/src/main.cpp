@@ -506,13 +506,19 @@ std::vector<Instance> generatePhoneBooths(const AABB& roomBounds, const AABB& bo
     std::mt19937 rng(rd());
 
     const int maxAttempts = 30000;
-    const float minDistance = 4.5f;
+    // El payphone.obj de Juan viene ~19.7u de alto (vs techo mapa ~7u).
+    // Escala vieja 1.3-1.7 dejaba cabinas de 25-33u (gigantes).
+    // Objetivo: alto mundo ~2.4-3.0u (cabina humana bajo el techo).
+    const float boothHeight = std::max(0.001f, boothBounds.max.y - boothBounds.min.y);
+    const float scaleMin = 2.4f / boothHeight;
+    const float scaleMax = 3.0f / boothHeight;
+    const float minDistance = 3.5f;
     const float wallClearance = 0.25f;
 
     for (int attempt = 0; attempt < maxAttempts && (int)out.size() < targetCount; ++attempt)
     {
         Instance instance{};
-        instance.scale = randomRange(rng, 1.3f, 1.7f);
+        instance.scale = randomRange(rng, scaleMin, scaleMax);
         instance.rotationDeg = glm::vec3(0.0f, randomRange(rng, 0.0f, 360.0f), 0.0f);
 
         const float footprintRadius = computeFootprintRadiusXZ(boothBounds, instance.scale);
@@ -1815,11 +1821,7 @@ int main() {
         if (sciFiComputerModel)
             drawPlanarShadows(*cubeShader, *sciFiComputerModel, computerInstances, floorY, lightDirection, false, STREAM_SHADOW_RADIUS);
         if (publicPhoneBoothModel)
-        {
-            model = glm::scale(model, glm::vec3(0.1f, 0.1f, 0.1f));
             drawPlanarShadows(*cubeShader, *publicPhoneBoothModel, boothInstances, floorY, lightDirection, false, STREAM_SHADOW_RADIUS);
-        }
-            
 
         glDepthMask(GL_TRUE);
         glDisable(GL_STENCIL_TEST);
