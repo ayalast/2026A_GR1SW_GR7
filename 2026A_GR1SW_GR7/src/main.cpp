@@ -82,6 +82,12 @@ CollisionManager colManager;
 
 bool flashlightOn = false;
 
+// Head-bob / sway al caminar (estilo Minecraft): se ve en camara y en la linterna
+static float headBobTimer = 0.0f;
+static float headBobAmount = 0.0f; // 0..1 suavizado
+static glm::vec3 headBobOffset(0.0f);
+static bool playerIsWalking = false;
+
 // UI hitboxes (menu 1920x1080): botones en y ≈ 0.546 y 0.634
 static bool uiHitPrimaryButton(double mx, double my)
 {
@@ -1541,15 +1547,20 @@ int main() {
 
         backroomsShader->use();
 
-        // Iluminacion (feature/lighting-juan): contraste lit/dark + techos mas brillantes
-        backroomsShader->setVec3("viewPos", camera.Position);
+        // Eye con head-bob: camara + linterna comparten el mismo offset (coherente al caminar)
+        const glm::vec3 eyePos = camera.Position + headBobOffset;
+        const glm::vec3 eyeFront = camera.Front;
+        const glm::vec3 eyeUp = camera.Up;
+
+        // Iluminacion (lit/dark + techos coherentes + linterna que sigue la mirada)
+        backroomsShader->setVec3("viewPos", eyePos);
         backroomsShader->setFloat("shininess", 30.0f);
         backroomsShader->setVec3("dirLight.direction", glm::vec3(-0.2f, -1.0f, -0.3f));
 
-        // Casi sin relleno global: las zonas sin point lights caen a negro (linterna tiene sentido)
-        backroomsShader->setVec3("dirLight.ambient", glm::vec3(0.0f, 0.0f, 0.0f));
-        backroomsShader->setVec3("dirLight.diffuse", glm::vec3(0.02f, 0.02f, 0.018f));
-        backroomsShader->setVec3("dirLight.specular", glm::vec3(0.05f, 0.05f, 0.05f));
+        // Relleno minimo (evita negro de video / triangulos duros) sin matar el contraste dark
+        backroomsShader->setVec3("dirLight.ambient", glm::vec3(0.012f, 0.011f, 0.009f));
+        backroomsShader->setVec3("dirLight.diffuse", glm::vec3(0.03f, 0.028f, 0.024f));
+        backroomsShader->setVec3("dirLight.specular", glm::vec3(0.04f, 0.04f, 0.035f));
         int lightIndex = 0;
 
         // Preferir luces ENCENDIDAS cercanas (no gastar slots en isOn=false)
@@ -1571,10 +1582,10 @@ int main() {
             size_t i = nearLightIndices[si];
             std::string base = "pointLights[" + std::to_string(lightIndex) + "].";
             backroomsShader->setVec3(base + "position", ceilingLights[i].position);
-            // Atenuacion mas corta: "charcos" de luz (lit) vs vacios oscuros
+            // Atenuacion mas suave: penumbra natural, menos borde triangular
             backroomsShader->setFloat(base + "constant", 1.0f);
-            backroomsShader->setFloat(base + "linear", 0.09f);
-            backroomsShader->setFloat(base + "quadratic", 0.012f);
+            backroomsShader->setFloat(base + "linear", 0.055f);
+            backroomsShader->setFloat(base + "quadratic", 0.0075f);
 
             float minDistance = 1e9f;
             for (const Instance& demon : demonInstances)
@@ -1587,16 +1598,17 @@ int main() {
             if (minDistance < 15.0f)
                 monsterFactor = glm::clamp((minDistance - 4.0f) / 11.0f, 0.12f, 1.0f);
 
-            // Mas brillo en zonas lit (compensa quitar el dirLight de relleno)
             glm::vec3 baseColor(0.95f, 0.92f, 0.84f);
-            glm::vec3 diffuse = baseColor * 0.38f * monsterFactor;
-            glm::vec3 specular = baseColor * 0.08f * monsterFactor;
-            glm::vec3 ambient = glm::vec3(0.0f);
+            glm::vec3 diffuse = baseColor * 0.34f * monsterFactor;
+            glm::vec3 specular = baseColor * 0.07f * monsterFactor;
+            // Ambient local suave: rellena un poco la zona lit sin invadir dark lejanas
+            glm::vec3 ambient = baseColor * 0.012f * monsterFactor;
 
             float distToCam = glm::distance(camera.Position, ceilingLights[i].position);
-            float distanceFade = 1.0f - glm::clamp((distToCam - 42.0f) / 14.0f, 0.0f, 1.0f);
+            float distanceFade = 1.0f - glm::clamp((distToCam - 44.0f) / 12.0f, 0.0f, 1.0f);
             diffuse *= distanceFade;
             specular *= distanceFade;
+            ambient *= distanceFade;
 
             backroomsShader->setVec3(base + "ambient", ambient);
             backroomsShader->setVec3(base + "diffuse", diffuse);
@@ -1613,27 +1625,32 @@ int main() {
             std::string base = "pointLights[" + std::to_string(lightIndex) + "].";
             backroomsShader->setVec3(base + "position", deskLampPositions[i]);
             backroomsShader->setFloat(base + "constant", 1.0f);
-            backroomsShader->setFloat(base + "linear", 0.14f);
-            backroomsShader->setFloat(base + "quadratic", 0.22f);
+            backroomsShader->setFloat(base + "linear", 0.12f);
+            backroomsShader->setFloat(base + "quadratic", 0.18f);
             backroomsShader->setVec3(base + "ambient", glm::vec3(0.01f, 0.005f, 0.015f));
             backroomsShader->setVec3(base + "diffuse", glm::vec3(0.28f, 0.14f, 0.35f));
             backroomsShader->setVec3(base + "specular", glm::vec3(0.22f, 0.12f, 0.28f));
             lightIndex++;
         }
         backroomsShader->setInt("numActivePointLights", lightIndex);
-        backroomsShader->setVec3("spotLight.position", camera.Position);
-        backroomsShader->setVec3("spotLight.direction", camera.Front);
-        backroomsShader->setFloat("spotLight.cutOff", glm::cos(glm::radians(14.0f)));
-        backroomsShader->setFloat("spotLight.outerCutOff", glm::cos(glm::radians(20.0f)));
+
+        // Linterna: origen en el ojo (con bob) + direccion = mirada.
+        // El cono angular manda (shader); la atenuacion es suave para que el circulo
+        // SIGA al mirar y no se quede en el punto mas cercano de la pared.
+        const glm::vec3 flashPos = eyePos + eyeFront * 0.12f;
+        backroomsShader->setVec3("spotLight.position", flashPos);
+        backroomsShader->setVec3("spotLight.direction", eyeFront);
+        // Cono mas definido: centro claro vs corona exterior
+        backroomsShader->setFloat("spotLight.cutOff", glm::cos(glm::radians(11.5f)));
+        backroomsShader->setFloat("spotLight.outerCutOff", glm::cos(glm::radians(19.0f)));
         backroomsShader->setFloat("spotLight.constant", 1.0f);
-        backroomsShader->setFloat("spotLight.linear", 0.03f);
-        backroomsShader->setFloat("spotLight.quadratic", 0.012f);
+        backroomsShader->setFloat("spotLight.linear", 0.018f);
+        backroomsShader->setFloat("spotLight.quadratic", 0.0045f);
         if (flashlightOn)
         {
-            // Linterna un poco mas util en zonas casi negras
             backroomsShader->setVec3("spotLight.ambient", glm::vec3(0.0f));
-            backroomsShader->setVec3("spotLight.diffuse", glm::vec3(1.15f, 1.12f, 1.0f));
-            backroomsShader->setVec3("spotLight.specular", glm::vec3(0.95f, 0.95f, 0.85f));
+            backroomsShader->setVec3("spotLight.diffuse", glm::vec3(1.35f, 1.30f, 1.15f));
+            backroomsShader->setVec3("spotLight.specular", glm::vec3(1.0f, 0.98f, 0.88f));
         }
         else
         {
@@ -1644,7 +1661,8 @@ int main() {
 
         float aspect = (SCR_HEIGHT > 0) ? (float)SCR_WIDTH / (float)SCR_HEIGHT : 16.0f / 9.0f;
         glm::mat4 projection = glm::perspective(glm::radians(camera.Zoom), aspect, 0.1f, 200.0f);
-        glm::mat4 view = camera.GetViewMatrix();
+        // View con head-bob (misma pose que la linterna)
+        glm::mat4 view = glm::lookAt(eyePos, eyePos + eyeFront, eyeUp);
         backroomsShader->setMat4("projection", projection);
         backroomsShader->setMat4("view", view);
 
@@ -1782,6 +1800,9 @@ void processInput(GLFWwindow* window)
         if (appState == AppState::Playing && escDown && !escWasDown)
         {
             appState = AppState::Paused;
+            headBobAmount = 0.0f;
+            headBobOffset = glm::vec3(0.0f);
+            playerIsWalking = false;
             glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
             firstMouse = true;
             glfwSetWindowTitle(window, "Backrooms - Pausa");
@@ -1797,14 +1818,38 @@ void processInput(GLFWwindow* window)
             escWasDown = escDown;
         enterWasDown = enterDown;
 
-        if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
+        const bool wantW = glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS;
+        const bool wantS = glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS;
+        const bool wantA = glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS;
+        const bool wantD = glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS;
+        playerIsWalking = wantW || wantS || wantA || wantD;
+
+        if (wantW)
             camera.ProcessKeyboard(FORWARD, deltaTime, colManager);
-        if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
+        if (wantS)
             camera.ProcessKeyboard(BACKWARD, deltaTime, colManager);
-        if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS)
+        if (wantA)
             camera.ProcessKeyboard(LEFT, deltaTime, colManager);
-        if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
+        if (wantD)
             camera.ProcessKeyboard(RIGHT, deltaTime, colManager);
+
+        // Head-bob: balanceo lateral + leve vertical al caminar (se ve sobre todo con linterna)
+        {
+            const float targetBob = playerIsWalking ? 1.0f : 0.0f;
+            // Suavizado de entrada/salida
+            const float bobLerp = 1.0f - std::exp(-deltaTime * (playerIsWalking ? 10.0f : 8.0f));
+            headBobAmount += (targetBob - headBobAmount) * bobLerp;
+
+            if (playerIsWalking)
+                headBobTimer += deltaTime * 9.5f; // frecuencia de paso
+            else
+                headBobTimer += deltaTime * 2.0f; // decae la fase lentamente
+
+            // Lateral (sin): ondula izquierda-derecha; vertical (sin 2x): sube-baja como pasos
+            const float sway = std::sin(headBobTimer) * 0.055f * headBobAmount;
+            const float bobY = std::sin(headBobTimer * 2.0f) * 0.035f * headBobAmount;
+            headBobOffset = camera.Right * sway + camera.WorldUp * bobY;
+        }
 
         static bool fKeyWasPressed = false;
         if (appState == AppState::Playing)
