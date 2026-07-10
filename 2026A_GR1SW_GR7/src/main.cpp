@@ -12,6 +12,7 @@
 #include <string>
 #include <cstdio>
 #include <cstring>
+#include <unordered_map>
 
 // Incluimos Assimp SOLO para probar que el vinculador (Linker) no de errores.
 #include <assimp/Importer.hpp>
@@ -638,18 +639,17 @@ struct CeilingLight
 // ============================================================================
 void findCeilingLights(const Model& model, const glm::vec3& worldOffset, std::vector<CeilingLight>& lights)
 {
-    std::random_device rd;
-    std::mt19937 rng(rd());
+    (void)model;
+    // Semilla fija: zonas dark/lit reproducibles entre ejecuciones (facil de probar y defender)
+    std::mt19937 rng(20260710u);
     std::uniform_real_distribution<float> roll(0.0f, 1.0f);
 
-    // === VARIABLES DE CALIBRACIÓN ===
-    // Modifica estos números (pueden ser positivos o negativos) para mover toda la cuadrícula
-    float offsetX = 2.9f;   // <- Incrementa o disminuye para mover las luces en el eje X
-    float offsetZ = -2.3f;  // <- Incrementa o disminuye para mover las luces en el eje Z
-
-    float spacingX = 6.0f; // Espaciado en X entre lámparas
-    float spacingZ = 8.0f; // Espaciado en Z entre lámparas
-    // ================================
+    // === VARIABLES DE CALIBRACIÓN (mismas del grupo) ===
+    float offsetX = 2.9f;
+    float offsetZ = -2.3f;
+    float spacingX = 6.0f;
+    float spacingZ = 8.0f;
+    // ==================================================
 
     float xMin = -182.4f + worldOffset.x;
     float xMax = 194.8f + worldOffset.x;
@@ -658,17 +658,93 @@ void findCeilingLights(const Model& model, const glm::vec3& worldOffset, std::ve
 
     float ceilY = 8.565f + worldOffset.y - 1.2f;
 
+    // Zonas grandes: pasillos/cuartos enteros oscuros (no apagones salpicados por lámpara)
+    const float zoneSize = 28.0f;
+    using ZoneKey = std::pair<int, int>;
+    struct ZoneKeyHash
+    {
+        size_t operator()(const ZoneKey& k) const noexcept
+        {
+            return std::hash<int>{}(k.first) ^ (std::hash<int>{}(k.second) << 1);
+        }
+    };
+    auto zoneKey = [zoneSize](float x, float z) -> ZoneKey {
+        int ix = static_cast<int>(std::floor(x / zoneSize));
+        int iz = static_cast<int>(std::floor(z / zoneSize));
+        return { ix, iz };
+    };
+
+    // Primera pasada: decidir si cada celda es dark (true) o lit (false)
+    std::unordered_map<ZoneKey, bool, ZoneKeyHash> zoneIsDark;
+    for (float x = xMin + spacingX * 0.5f + offsetX; x < xMax; x += spacingX)
+    {
+        for (float z = zMin + spacingZ * 0.5f + offsetZ; z < zMax; z += spacingZ)
+        {
+            ZoneKey k = zoneKey(x, z);
+            if (zoneIsDark.find(k) != zoneIsDark.end())
+                continue;
+            // ~38% de celdas oscuras de entrada
+            zoneIsDark[k] = roll(rng) < 0.38f;
+        }
+    }
+
+    // Segunda pasada: agrupar vecinos (manchas / pasillos continuos)
+    std::unordered_map<ZoneKey, bool, ZoneKeyHash> zoneDarkSmoothed = zoneIsDark;
+    for (const auto& kv : zoneIsDark)
+    {
+        const int ix = kv.first.first;
+        const int iz = kv.first.second;
+        int darkNeighbors = 0;
+        for (int dx = -1; dx <= 1; ++dx)
+        {
+            for (int dz = -1; dz <= 1; ++dz)
+            {
+                if (dx == 0 && dz == 0) continue;
+                ZoneKey nk{ ix + dx, iz + dz };
+                auto it = zoneIsDark.find(nk);
+                if (it != zoneIsDark.end() && it->second)
+                    darkNeighbors++;
+            }
+        }
+        // Si hay vecinos dark, tiende a oscurecer (pasillos negros continuos)
+        if (darkNeighbors >= 2)
+            zoneDarkSmoothed[kv.first] = true;
+        // Si casi no hay vecinos dark y era dark aislado, a veces se apaga el "punto suelto"
+        else if (darkNeighbors == 0 && kv.second && roll(rng) < 0.45f)
+            zoneDarkSmoothed[kv.first] = false;
+    }
+
+    int onCount = 0;
+    int offCount = 0;
     for (float x = xMin + spacingX * 0.5f + offsetX; x < xMax; x += spacingX)
     {
         for (float z = zMin + spacingZ * 0.5f + offsetZ; z < zMax; z += spacingZ)
         {
             CeilingLight cl;
             cl.position = glm::vec3(x, ceilY, z);
-            cl.isOn = roll(rng) > 0.40f;
+
+            ZoneKey k = zoneKey(x, z);
+            bool darkZone = zoneDarkSmoothed.count(k) ? zoneDarkSmoothed[k] : false;
+
+            if (darkZone)
+            {
+                // Zona oscura: casi todas apagadas (muy raro un tubo suelto)
+                cl.isOn = roll(rng) < 0.04f;
+            }
+            else
+            {
+                // Zona lit: casi todas encendidas (algunos tubos muertos sueltos)
+                cl.isOn = roll(rng) > 0.08f;
+            }
+
+            if (cl.isOn) onCount++;
+            else offCount++;
             lights.push_back(cl);
         }
     }
-    std::cout << "Ceiling lights generated: " << lights.size() << std::endl;
+    std::cout << "Ceiling lights generated: " << lights.size()
+              << " (ON=" << onCount << " OFF=" << offCount
+              << ", zonas dark/lit ~" << zoneSize << "u)\n";
 }
 
 
@@ -1491,21 +1567,24 @@ const std::vector<glm::vec3> officeAnchors = {
 
         backroomsShader->use();
 
-        // Calcular las luces
+        // Iluminacion (feature/lighting-juan): contraste lit/dark + techos mas brillantes
         backroomsShader->setVec3("viewPos", camera.Position);
         backroomsShader->setFloat("shininess", 30.0f);
         backroomsShader->setVec3("dirLight.direction", glm::vec3(-0.2f, -1.0f, -0.3f));
 
+        // Casi sin relleno global: las zonas sin point lights caen a negro (linterna tiene sentido)
         backroomsShader->setVec3("dirLight.ambient", glm::vec3(0.0f, 0.0f, 0.0f));
-        backroomsShader->setVec3("dirLight.diffuse", glm::vec3(0.18f, 0.18f, 0.16f));
-        backroomsShader->setVec3("dirLight.specular", glm::vec3(0.2f, 0.2f, 0.2f));
+        backroomsShader->setVec3("dirLight.diffuse", glm::vec3(0.02f, 0.02f, 0.018f));
+        backroomsShader->setVec3("dirLight.specular", glm::vec3(0.05f, 0.05f, 0.05f));
         int lightIndex = 0;
 
-        // Solo luces cercanas (sin ordenar TODO el arreglo cada frame)
+        // Preferir luces ENCENDIDAS cercanas (no gastar slots en isOn=false)
         std::vector<size_t> nearLightIndices;
         nearLightIndices.reserve(64);
         for (size_t i = 0; i < ceilingLights.size(); ++i)
         {
+            if (!ceilingLights[i].isOn)
+                continue;
             if (distXZ(camera.Position, ceilingLights[i].position) <= STREAM_LIGHT_RADIUS)
                 nearLightIndices.push_back(i);
         }
@@ -1518,37 +1597,32 @@ const std::vector<glm::vec3> officeAnchors = {
             size_t i = nearLightIndices[si];
             std::string base = "pointLights[" + std::to_string(lightIndex) + "].";
             backroomsShader->setVec3(base + "position", ceilingLights[i].position);
+            // Atenuacion mas corta: "charcos" de luz (lit) vs vacios oscuros
             backroomsShader->setFloat(base + "constant", 1.0f);
-            backroomsShader->setFloat(base + "linear", 0.05f);
-            backroomsShader->setFloat(base + "quadratic", 0.003f);
+            backroomsShader->setFloat(base + "linear", 0.09f);
+            backroomsShader->setFloat(base + "quadratic", 0.012f);
 
-            glm::vec3 diffuse(0.0f);
-            glm::vec3 specular(0.0f);
-            glm::vec3 ambient(0.0f);
-
-            if (ceilingLights[i].isOn)
+            float minDistance = 1e9f;
+            for (const Instance& demon : demonInstances)
             {
-                float minDistance = 1e9f;
-                for (const Instance& demon : demonInstances)
-                {
-                    float d = glm::distance(ceilingLights[i].position, demon.position);
-                    if (d < minDistance)
-                        minDistance = d;
-                }
-                float monsterFactor = 1.0f;
-                if (minDistance < 15.0f)
-                    monsterFactor = glm::clamp((minDistance - 4.0f) / 11.0f, 0.15f, 1.0f);
-
-                glm::vec3 baseColor(0.9f, 0.88f, 0.82f);
-                diffuse = baseColor * 0.22f * monsterFactor;
-                specular = baseColor * 0.05f * monsterFactor;
-                ambient = glm::vec3(0.0f);
-
-                float distToCam = glm::distance(camera.Position, ceilingLights[i].position);
-                float distanceFade = 1.0f - glm::clamp((distToCam - 50.0f) / 15.0f, 0.0f, 1.0f);
-                diffuse *= distanceFade;
-                specular *= distanceFade;
+                float d = glm::distance(ceilingLights[i].position, demon.position);
+                if (d < minDistance)
+                    minDistance = d;
             }
+            float monsterFactor = 1.0f;
+            if (minDistance < 15.0f)
+                monsterFactor = glm::clamp((minDistance - 4.0f) / 11.0f, 0.12f, 1.0f);
+
+            // Mas brillo en zonas lit (compensa quitar el dirLight de relleno)
+            glm::vec3 baseColor(0.95f, 0.92f, 0.84f);
+            glm::vec3 diffuse = baseColor * 0.38f * monsterFactor;
+            glm::vec3 specular = baseColor * 0.08f * monsterFactor;
+            glm::vec3 ambient = glm::vec3(0.0f);
+
+            float distToCam = glm::distance(camera.Position, ceilingLights[i].position);
+            float distanceFade = 1.0f - glm::clamp((distToCam - 42.0f) / 14.0f, 0.0f, 1.0f);
+            diffuse *= distanceFade;
+            specular *= distanceFade;
 
             backroomsShader->setVec3(base + "ambient", ambient);
             backroomsShader->setVec3(base + "diffuse", diffuse);
@@ -1556,6 +1630,7 @@ const std::vector<glm::vec3> officeAnchors = {
             lightIndex++;
         }
 
+        // Lamparas de escritorio: poco ambient para no "llenar" zonas dark
         for (size_t i = 0; i < deskLampPositions.size() && lightIndex < STREAM_MAX_POINT_LIGHTS + 8; i++)
         {
             if (distXZ(camera.Position, deskLampPositions[i]) > STREAM_DRAW_RADIUS)
@@ -1564,26 +1639,27 @@ const std::vector<glm::vec3> officeAnchors = {
             std::string base = "pointLights[" + std::to_string(lightIndex) + "].";
             backroomsShader->setVec3(base + "position", deskLampPositions[i]);
             backroomsShader->setFloat(base + "constant", 1.0f);
-            backroomsShader->setFloat(base + "linear", 0.1f);
-            backroomsShader->setFloat(base + "quadratic", 0.15f);
-            backroomsShader->setVec3(base + "ambient", glm::vec3(0.08f, 0.02f, 0.1f));
-            backroomsShader->setVec3(base + "diffuse", glm::vec3(0.2f, 0.1f, 0.3f));
-            backroomsShader->setVec3(base + "specular", glm::vec3(0.2f, 0.1f, 0.3f));
+            backroomsShader->setFloat(base + "linear", 0.14f);
+            backroomsShader->setFloat(base + "quadratic", 0.22f);
+            backroomsShader->setVec3(base + "ambient", glm::vec3(0.01f, 0.005f, 0.015f));
+            backroomsShader->setVec3(base + "diffuse", glm::vec3(0.28f, 0.14f, 0.35f));
+            backroomsShader->setVec3(base + "specular", glm::vec3(0.22f, 0.12f, 0.28f));
             lightIndex++;
         }
         backroomsShader->setInt("numActivePointLights", lightIndex);
         backroomsShader->setVec3("spotLight.position", camera.Position);
         backroomsShader->setVec3("spotLight.direction", camera.Front);
-        backroomsShader->setFloat("spotLight.cutOff", glm::cos(glm::radians(12.5f)));
-        backroomsShader->setFloat("spotLight.outerCutOff", glm::cos(glm::radians(17.5f)));
+        backroomsShader->setFloat("spotLight.cutOff", glm::cos(glm::radians(14.0f)));
+        backroomsShader->setFloat("spotLight.outerCutOff", glm::cos(glm::radians(20.0f)));
         backroomsShader->setFloat("spotLight.constant", 1.0f);
-        backroomsShader->setFloat("spotLight.linear", 0.025f);
-        backroomsShader->setFloat("spotLight.quadratic", 0.005f);
+        backroomsShader->setFloat("spotLight.linear", 0.03f);
+        backroomsShader->setFloat("spotLight.quadratic", 0.012f);
         if (flashlightOn)
         {
+            // Linterna un poco mas util en zonas casi negras
             backroomsShader->setVec3("spotLight.ambient", glm::vec3(0.0f));
-            backroomsShader->setVec3("spotLight.diffuse", glm::vec3(0.9f, 0.9f, 0.8f));
-            backroomsShader->setVec3("spotLight.specular", glm::vec3(0.9f, 0.9f, 0.8f));
+            backroomsShader->setVec3("spotLight.diffuse", glm::vec3(1.15f, 1.12f, 1.0f));
+            backroomsShader->setVec3("spotLight.specular", glm::vec3(0.95f, 0.95f, 0.85f));
         }
         else
         {
