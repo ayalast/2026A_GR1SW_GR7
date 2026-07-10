@@ -147,6 +147,10 @@
   <ItemGroup>
     <ClCompile Include="Dependencias\Library\glad.c" />
     <ClCompile Include="src\main.cpp" />
+    <ClCompile Include="src\audio_bgm.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="sounds\S1.mp3" />
   </ItemGroup>
   <ItemGroup>
     <None Include="models\backrooms_level_0\backrooms.mtl" />

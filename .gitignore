@@ -6,3 +6,9 @@ Release/
 *.pdb
 *.idb
 *.ilk
+
+# local diagnostics / temp
+audio_test_*.txt
+spawn_diag*.txt
+*.user
+
