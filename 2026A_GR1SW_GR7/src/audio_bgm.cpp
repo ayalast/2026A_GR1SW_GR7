@@ -55,14 +55,15 @@ static void scheduleSilence()
 {
     g_ambientPhase = AmbientPhase::Silent;
     g_ambientTimer = 0.0f;
-    g_ambientNext  = randRange(18.0f, 95.0f);
+    g_ambientNext  = randRange(25.0f, 90.0f);
 }
 
 static void schedulePlayBurst()
 {
     g_ambientPhase = AmbientPhase::Playing;
     g_ambientTimer = 0.0f;
-    g_ambientNext  = randRange(22.0f, 70.0f);
+    // Al menos 2-3 min de cancion por racha (antes ~22-70s y siempre desde el inicio)
+    g_ambientNext  = randRange(120.0f, 185.0f);
 }
 
 static bool ensureSoundLoaded()
@@ -96,7 +97,7 @@ static bool ensureSoundLoaded()
     return true;
 }
 
-static void startSound(float volume, ma_bool32 looping)
+static void startSound(float volume, ma_bool32 looping, bool randomOffset)
 {
     if (!ensureSoundLoaded())
         return;
@@ -106,7 +107,26 @@ static void startSound(float volume, ma_bool32 looping)
 
     ma_sound_set_looping(&g_bgm, looping);
     ma_sound_set_volume(&g_bgm, volume);
-    ma_sound_seek_to_pcm_frame(&g_bgm, 0);
+
+    ma_uint64 seekFrame = 0;
+    if (randomOffset)
+    {
+        ma_uint64 lengthFrames = 0;
+        if (ma_sound_get_length_in_pcm_frames(&g_bgm, &lengthFrames) == MA_SUCCESS && lengthFrames > 1)
+        {
+            // Empieza en un punto aleatorio (evita oir solo el primer minuto siempre).
+            // No arrancar en el ultimo ~12% para que haya cuerpo de cancion por delante.
+            const double maxFrac = 0.88;
+            const double t = static_cast<double>(std::rand()) / static_cast<double>(RAND_MAX);
+            seekFrame = static_cast<ma_uint64>(t * maxFrac * static_cast<double>(lengthFrames));
+            if (seekFrame >= lengthFrames)
+                seekFrame = lengthFrames - 1;
+            std::cout << "[Audio] BGM seek aleatorio frame=" << seekFrame
+                      << " / " << lengthFrames << "\n";
+        }
+    }
+    ma_sound_seek_to_pcm_frame(&g_bgm, seekFrame);
+
     ma_result result = ma_sound_start(&g_bgm);
     if (result != MA_SUCCESS)
         std::cout << "[Audio] No se pudo start BGM (" << (int)result << ")\n";
@@ -266,7 +286,7 @@ void AudioBgm_EnterMenuLoop()
         return;
 
     g_mode = BgmMode::MenuLoop;
-    startSound(g_menuVolume, MA_TRUE);
+    startSound(g_menuVolume, MA_TRUE, false); // menu: desde el inicio
     std::cout << "[Audio] Modo menu: loop continuo vol=" << g_menuVolume << "\n";
 }
 
@@ -285,10 +305,10 @@ void AudioBgm_Update(float deltaTime)
     {
         if (g_ambientTimer >= g_ambientNext)
         {
-            startSound(g_gameVolume, MA_TRUE);
+            startSound(g_gameVolume, MA_TRUE, true); // juego: offset aleatorio en la pista
             schedulePlayBurst();
             std::cout << "[Audio] Racha ambient ~" << g_ambientNext << "s (vol="
-                      << g_gameVolume << ")\n";
+                      << g_gameVolume << ", 2-3 min, seek random)\n";
         }
     }
     else
