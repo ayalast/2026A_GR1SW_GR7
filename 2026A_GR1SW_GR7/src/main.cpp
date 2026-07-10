@@ -13,6 +13,13 @@
 #include <cstdio>
 #include <cstring>
 #include <unordered_map>
+#ifdef _WIN32
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
+#include <process.h>
+#endif
 
 // Incluimos Assimp SOLO para probar que el vinculador (Linker) no de errores.
 #include <assimp/Importer.hpp>
@@ -60,8 +67,17 @@ static bool uiClickLatch = false;       // evita multi-click el mismo frame
 // Culling por distancia al DIBUJAR (props se precargan en splash; sin stream al caminar)
 static const float STREAM_DRAW_RADIUS   = 55.0f; // no dibuja instancias muy lejanas
 static const float STREAM_SHADOW_RADIUS = 32.0f; // sombras solo cerca
-static const float STREAM_LIGHT_RADIUS  = 52.0f; // point lights del techo relevantes
-static const int   STREAM_MAX_POINT_LIGHTS = 36;
+// Radio grande: evita "pop" de luces al caminar (antes 52u se sentia cerca)
+static const float STREAM_LIGHT_RADIUS  = 100.0f; // point lights del techo relevantes
+static const int   STREAM_MAX_POINT_LIGHTS = 48;
+
+// --- Iteracion de iluminacion (arranque SUPER rapido) ---
+// true  = solo mapa visual + colisiones + luces. Sin props, border, anclas de pared,
+//         busqueda de spawn, settle de 2s, ni menu de inicio (entra directo al juego).
+// false = carga completa (demo / entrega con todos los props).
+// En bryan/mejoras-iluminacion-ui: false (probar todo junto).
+// En feature/iluminacion-rapida: true (iterar luces rapido).
+static const bool LIGHTING_FAST_LOAD = false;
 
 // Camara: valores del repo original (commit a7354ab / main de GitHub)
 // Position (0, 0, 3), Yaw -90, Pitch 0. NO usar floorY+1.7 (escala del mapa es mayor).
@@ -88,22 +104,31 @@ static float headBobAmount = 0.0f; // 0..1 suavizado
 static glm::vec3 headBobOffset(0.0f);
 static bool playerIsWalking = false;
 
-// UI hitboxes (menu 1920x1080): botones en y ≈ 0.546 y 0.634
-static bool uiHitPrimaryButton(double mx, double my)
+// UI hitboxes (menu 1920x1080).
+// Menu inicio: 2 botones (primary/secondary).
+// Pausa: 3 botones — CONTINUAR / REINICIAR / SALIR (y ≈ 0.52 / 0.60 / 0.68).
+static bool uiHitButtonAt(double mx, double my, double cy, double hw = 0.115, double hh = 0.038)
 {
     if (SCR_WIDTH == 0 || SCR_HEIGHT == 0) return false;
     double nx = mx / (double)SCR_WIDTH;
     double ny = my / (double)SCR_HEIGHT;
-    const double cx = 0.5, cy = 0.546, hw = 0.115, hh = 0.04;
+    const double cx = 0.5;
     return nx > cx - hw && nx < cx + hw && ny > cy - hh && ny < cy + hh;
+}
+static bool uiHitPrimaryButton(double mx, double my)
+{
+    // Menu inicio: COMENZAR; en pausa: CONTINUAR
+    return uiHitButtonAt(mx, my, (appState == AppState::Paused) ? 0.52 : 0.546);
 }
 static bool uiHitSecondaryButton(double mx, double my)
 {
-    if (SCR_WIDTH == 0 || SCR_HEIGHT == 0) return false;
-    double nx = mx / (double)SCR_WIDTH;
-    double ny = my / (double)SCR_HEIGHT;
-    const double cx = 0.5, cy = 0.634, hw = 0.115, hh = 0.04;
-    return nx > cx - hw && nx < cx + hw && ny > cy - hh && ny < cy + hh;
+    // Menu inicio: SALIR; en pausa: REINICIAR (medio)
+    return uiHitButtonAt(mx, my, (appState == AppState::Paused) ? 0.60 : 0.634);
+}
+static bool uiHitTertiaryButton(double mx, double my)
+{
+    // Solo pausa: SALIR (abajo)
+    return uiHitButtonAt(mx, my, 0.68);
 }
 
 static float distXZ(const glm::vec3& a, const glm::vec3& b)
@@ -917,6 +942,8 @@ int main() {
             std::cout << "[Load] No se encontro textures/splash.png, usando color solido.\n";
         }
         glBindTexture(GL_TEXTURE_2D, 0);
+        // No dejar flip=true: modelos usan Assimp FlipUVs + stbi flip false
+        stbi_set_flip_vertically_on_load(false);
     }
 
     auto loadUiTexture = [&](const char* path) -> unsigned int {
@@ -944,6 +971,7 @@ int main() {
             std::cout << "[UI] Falta " << path << "\n";
         }
         glBindTexture(GL_TEXTURE_2D, 0);
+        stbi_set_flip_vertically_on_load(false);
         return tex;
     };
 
@@ -1177,28 +1205,38 @@ int main() {
     roomWorldBounds = { roomLocalBounds.min + backroomsPos, roomLocalBounds.max + backroomsPos };
     roomCenter = (roomWorldBounds.min + roomWorldBounds.max) * 0.5f;
     floorY = roomWorldBounds.min.y;
-    wallAnchors = collectWallAnchors(*backroomsCollisionsModel, backroomsPos);
+    // Anclas de pared solo hacen falta para colocar camaras (props) -> omitir en modo rapido
+    if (!LIGHTING_FAST_LOAD)
+        wallAnchors = collectWallAnchors(*backroomsCollisionsModel, backroomsPos);
     colManager.addStaticBox(*backroomsCollisionsModel, backroomsPos);
     progressBase += W_COLLISION;
     if (!drawSplashFrame("Backrooms - Colisiones listas", progressBase)) { glfwTerminate(); return 0; }
     std::cout << "[Load] Colisiones OK (meshes " << backroomsCollisionsModel->meshes.size() << ")\n";
 
-    // --- ETAPA 3: nivel visual (suele ser la mas pesada) ---
+    // --- ETAPA 3: nivel visual (suele ser la mas pesada; necesario para ver iluminacion) ---
     if (!drawSplashFrame("Backrooms - Cargando nivel (Backrooms)...", progressBase + W_LEVEL * 0.15f)) { glfwTerminate(); return 0; }
     backroomsModel = std::make_unique<Model>("models/backrooms_level_0/backrooms.obj");
     progressBase += W_LEVEL;
     if (!drawSplashFrame("Backrooms - Nivel listo", progressBase)) { glfwTerminate(); return 0; }
     std::cout << "[Load] Nivel visual OK\n";
 
-    // --- ETAPA 4: border ---
-    if (!drawSplashFrame("Backrooms - Cargando limites del mapa...", progressBase + W_BORDER * 0.2f)) { glfwTerminate(); return 0; }
-    border = std::make_unique<Model>("models/border/border.obj");
-    colManager.addStaticBox(*border, backroomsPos);
-    progressBase += W_BORDER;
-    if (!drawSplashFrame("Backrooms - Limites listos", progressBase)) { glfwTerminate(); return 0; }
-    std::cout << "[Load] Border OK\n";
+    // --- ETAPA 4: border (omitido en modo rapido: no aporta a iluminacion) ---
+    if (LIGHTING_FAST_LOAD)
+    {
+        progressBase += W_BORDER;
+        std::cout << "[Load] LIGHTING_FAST_LOAD: border omitido\n";
+    }
+    else
+    {
+        if (!drawSplashFrame("Backrooms - Cargando limites del mapa...", progressBase + W_BORDER * 0.2f)) { glfwTerminate(); return 0; }
+        border = std::make_unique<Model>("models/border/border.obj");
+        colManager.addStaticBox(*border, backroomsPos);
+        progressBase += W_BORDER;
+        if (!drawSplashFrame("Backrooms - Limites listos", progressBase)) { glfwTerminate(); return 0; }
+        std::cout << "[Load] Border OK\n";
+    }
 
-    // --- ETAPA 5: luces de techo (CPU pesada: miles de luces) ---
+    // --- ETAPA 5: luces de techo (rejilla CPU, no lee el mesh) ---
     if (!drawSplashFrame("Backrooms - Preparando luces...", progressBase + W_LIGHTS * 0.1f)) { glfwTerminate(); return 0; }
     std::vector<CeilingLight> ceilingLights;
     findCeilingLights(*backroomsModel, backroomsPos, ceilingLights);
@@ -1206,12 +1244,19 @@ int main() {
     if (!drawSplashFrame("Backrooms - Luces listas", progressBase)) { glfwTerminate(); return 0; }
     std::cout << "[Load] Luces de techo: " << ceilingLights.size() << "\n";
 
-    // --- ETAPA 6: audio ---
+    // --- ETAPA 6: audio (en modo rapido solo init SFX; sin musica de carga) ---
     if (!drawSplashFrame("Backrooms - Cargando audio...", progressBase + W_AUDIO * 0.3f)) { glfwTerminate(); return 0; }
     if (AudioBgm_Init())
     {
-        if (!AudioBgm_PlayLoop("sounds/S1.mp3", BGM_DISTANT_VOLUME))
-            std::cout << "[Audio] Continuando sin BGM.\n";
+        if (!LIGHTING_FAST_LOAD)
+        {
+            if (!AudioBgm_PlayLoop("sounds/S1.mp3", BGM_DISTANT_VOLUME))
+                std::cout << "[Audio] Continuando sin BGM.\n";
+        }
+        else
+        {
+            std::cout << "[Load] LIGHTING_FAST_LOAD: BGM omitido (SFX linterna/pasos siguen disponibles)\n";
+        }
     }
     progressBase += W_AUDIO;
     if (!drawSplashFrame("Backrooms - Audio listo", progressBase)) { AudioBgm_Shutdown(); glfwTerminate(); return 0; }
@@ -1258,6 +1303,21 @@ int main() {
 
     // === PRECARGA DE PROPS EN SPLASH (feature/carga: todo listo antes de jugar) ===
     // El stream al caminar causaba freezes al cargar Assimp en el hilo principal.
+    // LIGHTING_FAST_LOAD: omite TODOS los props para iterar iluminacion con arranque rapido.
+    if (LIGHTING_FAST_LOAD)
+    {
+        progressBase += W_CAMS + W_OFFICE + W_BOXES + W_DEMON + W_COMP + W_BOOTHS;
+        if (!drawSplashFrame("Backrooms - Modo rapido (solo mapa + luces)...", progressBase))
+        {
+            AudioBgm_Shutdown();
+            glfwTerminate();
+            return 0;
+        }
+        std::cout << "[Load] LIGHTING_FAST_LOAD=1: props omitidos (camaras/oficina/cajas/entidad/PCs/cabinas).\n";
+        std::cout << "[Load] Solo nivel + colisiones + luces. Sin border/props/BGM/menu. LIGHTING_FAST_LOAD=false = demo completa.\n";
+    }
+    else
+    {
     if (!drawSplashFrame("Backrooms - Cargando camaras...", progressBase + W_CAMS * 0.2f)) { AudioBgm_Shutdown(); glfwTerminate(); return 0; }
     surveillanceCameraModel = std::make_unique<Model>("models/surveillance_camera/camaras_vigilancia.obj");
     {
@@ -1331,11 +1391,24 @@ int main() {
     if (!drawSplashFrame("Backrooms - Cabinas listas", progressBase)) { AudioBgm_Shutdown(); glfwTerminate(); return 0; }
     std::cout << "[Load] Cabinas: " << boothInstances.size() << "\n";
     std::cout << "[Load] Todos los props precargados (sin stream al caminar).\n";
+    } // end !LIGHTING_FAST_LOAD
 
     // --- Spawn ---
     // GitHub a7354ab: Camera(0, 0, 3), Yaw=-90, Pitch=0  -> altura Y=0 (CORRECTA a escala del mapa).
     // Eso a menudo mira de frente a una pared. Mantenemos Y=0 y buscamos XZ+yaw con vista abierta a pasillos.
     if (!drawSplashFrame("Backrooms - Preparando spawn...", progressBase + W_SPAWN * 0.4f)) { AudioBgm_Shutdown(); glfwTerminate(); return 0; }
+    if (LIGHTING_FAST_LOAD)
+    {
+        // Sin busqueda de pasillo: spawn fijo (ahorra mucho CPU al arrancar)
+        camera.Position = glm::vec3(0.0f, 0.0f, 3.0f);
+        camera.Yaw = -90.0f;
+        camera.Pitch = -3.0f;
+        camera.ProcessMouseMovement(0.0f, 0.0f);
+        progressBase += W_SPAWN;
+        std::cout << "[Spawn] LIGHTING_FAST_LOAD: spawn fijo (0,0,3) yaw=-90\n";
+        if (!drawSplashFrame("Backrooms - Spawn listo", progressBase)) { AudioBgm_Shutdown(); glfwTerminate(); return 0; }
+    }
+    else
     {
         const float eyeY = 0.0f; // altura original del repo (NO floorY+1.7)
         auto freeWalk = [&](glm::vec3 p, glm::vec3 dir, float maxDist) -> float {
@@ -1443,11 +1516,11 @@ int main() {
         std::cout << "[Spawn] GitHub altura Y=0 conservada. Vista abierta a pasillos: score=" << bestScore
                   << " pos=(" << camera.Position.x << ", " << camera.Position.y << ", " << camera.Position.z
                   << ") yaw=" << camera.Yaw << " (repo original era 0,0,3 yaw=-90)\n";
-    }
-    progressBase += W_SPAWN;
-    if (!drawSplashFrame("Backrooms - Spawn listo", progressBase)) { AudioBgm_Shutdown(); glfwTerminate(); return 0; }
+        progressBase += W_SPAWN;
+        if (!drawSplashFrame("Backrooms - Spawn listo", progressBase)) { AudioBgm_Shutdown(); glfwTerminate(); return 0; }
+    } // end !LIGHTING_FAST_LOAD spawn search
 
-    // Texturas de menu
+    // Texturas de menu (pausa sigue disponible en modo rapido)
     if (!drawSplashFrame("Backrooms - Cargando interfaz...", progressBase + W_UI * 0.4f)) { AudioBgm_Shutdown(); glfwTerminate(); return 0; }
     menuStartTex = loadUiTexture("textures/menu_start.png");
     menuPauseTex = loadUiTexture("textures/menu_pause.png");
@@ -1455,16 +1528,16 @@ int main() {
     progressBase += W_UI;
     if (!drawSplashFrame("Backrooms - Interfaz lista", progressBase)) { AudioBgm_Shutdown(); glfwTerminate(); return 0; }
 
-    // Espera final realista (GPU/drivers terminan de asentar; evita "COMENZAR" prematuro + hitch)
+    // Espera final: en modo rapido casi cero; en demo completa ~2.2 s
     {
         const double settleStart = glfwGetTime();
-        const double settleSeconds = 2.2; // tiempo extra visible al 95-100%
+        const double settleSeconds = LIGHTING_FAST_LOAD ? 0.05 : 2.2;
         while (true)
         {
             double t = (glfwGetTime() - settleStart) / settleSeconds;
             if (t > 1.0) t = 1.0;
             float p = progressBase + W_SETTLE * static_cast<float>(t);
-            if (!drawSplashFrame("Backrooms - Finalizando...", p))
+            if (!drawSplashFrame(LIGHTING_FAST_LOAD ? "Backrooms - Listo (modo rapido)..." : "Backrooms - Finalizando...", p))
             {
                 AudioBgm_Shutdown();
                 glfwTerminate();
@@ -1480,26 +1553,44 @@ int main() {
             glfwTerminate();
             return 0;
         }
-        // un instante en 100% para que se lea
-        for (int i = 0; i < 20; ++i)
+        if (!LIGHTING_FAST_LOAD)
         {
-            if (!drawSplashFrame("Backrooms - Listo para jugar", 1.0f))
+            // un instante en 100% para que se lea (solo demo completa)
+            for (int i = 0; i < 20; ++i)
             {
-                AudioBgm_Shutdown();
-                glfwTerminate();
-                return 0;
+                if (!drawSplashFrame("Backrooms - Listo para jugar", 1.0f))
+                {
+                    AudioBgm_Shutdown();
+                    glfwTerminate();
+                    return 0;
+                }
             }
         }
     }
 
-    // Menu principal: SOLO ahora (carga completa, % = 100)
-    appState = AppState::Menu;
-    fadeBlack = 1.0f;
-    glfwSetWindowTitle(window, "Backrooms - Menu");
-    glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
-    firstMouse = true;
-    lastFrame = static_cast<float>(glfwGetTime());
-    std::cout << "[UI] Carga 100%. Menu COMENZAR / SALIR disponible.\n";
+    if (LIGHTING_FAST_LOAD)
+    {
+        // Entra directo al juego (sin menu de COMENZAR)
+        appState = AppState::FadeIn;
+        fadeBlack = 1.0f;
+        glfwSetWindowTitle(window, "Backrooms - Iluminacion RAPIDA");
+        glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+        firstMouse = true;
+        lastFrame = static_cast<float>(glfwGetTime());
+        std::cout << "[UI] LIGHTING_FAST_LOAD: entrada directa al juego (sin menu).\n";
+        std::cout << "[UI] Pon LIGHTING_FAST_LOAD=false para carga/demo completa.\n";
+    }
+    else
+    {
+        // Menu principal: SOLO ahora (carga completa, % = 100)
+        appState = AppState::Menu;
+        fadeBlack = 1.0f;
+        glfwSetWindowTitle(window, "Backrooms - Menu");
+        glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+        firstMouse = true;
+        lastFrame = static_cast<float>(glfwGetTime());
+        std::cout << "[UI] Carga 100%. Menu COMENZAR / SALIR disponible.\n";
+    }
 
     // 9. Bucle principal
     while (!glfwWindowShouldClose(window)) {
@@ -1507,6 +1598,9 @@ int main() {
         deltaTime = currentFrame - lastFrame;
         lastFrame = currentFrame;
         if (deltaTime > 0.1f) deltaTime = 0.1f;
+
+        // BGM: en juego hace rachas/silencios; en menu no hace nada (loop fijo)
+        AudioBgm_Update(deltaTime);
 
         processInput(window);
 
@@ -1557,9 +1651,9 @@ int main() {
         backroomsShader->setFloat("shininess", 30.0f);
         backroomsShader->setVec3("dirLight.direction", glm::vec3(-0.2f, -1.0f, -0.3f));
 
-        // Relleno minimo (evita negro de video / triangulos duros) sin matar el contraste dark
-        backroomsShader->setVec3("dirLight.ambient", glm::vec3(0.012f, 0.011f, 0.009f));
-        backroomsShader->setVec3("dirLight.diffuse", glm::vec3(0.03f, 0.028f, 0.024f));
+        // Relleno global muy bajo: dark zones se quedan oscuras; el brillo lo dan point lights ON
+        backroomsShader->setVec3("dirLight.ambient", glm::vec3(0.010f, 0.009f, 0.008f));
+        backroomsShader->setVec3("dirLight.diffuse", glm::vec3(0.028f, 0.026f, 0.022f));
         backroomsShader->setVec3("dirLight.specular", glm::vec3(0.04f, 0.04f, 0.035f));
         int lightIndex = 0;
 
@@ -1582,10 +1676,10 @@ int main() {
             size_t i = nearLightIndices[si];
             std::string base = "pointLights[" + std::to_string(lightIndex) + "].";
             backroomsShader->setVec3(base + "position", ceilingLights[i].position);
-            // Atenuacion mas suave: penumbra natural, menos borde triangular
+            // Atenuacion: suave pero no tan "infinita" (evita acumular blanco al final del pasillo)
             backroomsShader->setFloat(base + "constant", 1.0f);
-            backroomsShader->setFloat(base + "linear", 0.055f);
-            backroomsShader->setFloat(base + "quadratic", 0.0075f);
+            backroomsShader->setFloat(base + "linear", 0.048f);
+            backroomsShader->setFloat(base + "quadratic", 0.0055f);
 
             float minDistance = 1e9f;
             for (const Instance& demon : demonInstances)
@@ -1598,14 +1692,16 @@ int main() {
             if (minDistance < 15.0f)
                 monsterFactor = glm::clamp((minDistance - 4.0f) / 11.0f, 0.12f, 1.0f);
 
-            glm::vec3 baseColor(0.95f, 0.92f, 0.84f);
-            glm::vec3 diffuse = baseColor * 0.34f * monsterFactor;
+            // Lit agradable; el soft-knee del shader evita el flash blanco al acercarte
+            glm::vec3 baseColor(0.96f, 0.93f, 0.86f);
+            glm::vec3 diffuse = baseColor * 0.46f * monsterFactor;
             glm::vec3 specular = baseColor * 0.07f * monsterFactor;
-            // Ambient local suave: rellena un poco la zona lit sin invadir dark lejanas
-            glm::vec3 ambient = baseColor * 0.012f * monsterFactor;
+            // Ambient moderado (0.055 * 40 luces reventaba paredes)
+            glm::vec3 ambient = baseColor * 0.028f * monsterFactor;
 
+            // Fade suave y LEJOS (antes 44-56u se notaba al caminar)
             float distToCam = glm::distance(camera.Position, ceilingLights[i].position);
-            float distanceFade = 1.0f - glm::clamp((distToCam - 44.0f) / 12.0f, 0.0f, 1.0f);
+            float distanceFade = 1.0f - glm::clamp((distToCam - 72.0f) / 28.0f, 0.0f, 1.0f);
             diffuse *= distanceFade;
             specular *= distanceFade;
             ambient *= distanceFade;
@@ -1666,13 +1762,16 @@ int main() {
         backroomsShader->setMat4("projection", projection);
         backroomsShader->setMat4("view", view);
 
-        // Dibujar backrooms (siempre)
+        // Nivel: wallpaper intermedio. Props: albedo real (sin filtro de pared).
         glm::mat4 model = glm::mat4(1.0f);
         model = glm::translate(model, backroomsPos);
         backroomsShader->setMat4("model", model);
+        backroomsShader->setBool("applyLevelWallpaper", true);
         backroomsModel->Draw(*backroomsShader);
-        border->Draw(*backroomsShader);
+        if (border)
+            border->Draw(*backroomsShader);
 
+        backroomsShader->setBool("applyLevelWallpaper", false);
         // Props (ya precargados) + culling por distancia al dibujar
         if (surveillanceCameraModel)
             drawCameraInstances(*backroomsShader, *surveillanceCameraModel, cameraInstances, glm::vec3(1.0f), STREAM_DRAW_RADIUS);
@@ -1745,6 +1844,8 @@ static void startGameFromMenu(GLFWwindow* window)
     glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
     firstMouse = true;
     glfwSetWindowTitle(window, "Backrooms - Grupo 7");
+    // Mitad de volumen + musica por rachas (estilo Minecraft)
+    AudioBgm_EnterGameAmbient();
     std::cout << "[UI] COMENZAR -> fundido al juego\n";
 }
 
@@ -1756,6 +1857,38 @@ static void resumeFromPause(GLFWwindow* window)
     firstMouse = true;
     glfwSetWindowTitle(window, "Backrooms - Grupo 7");
     std::cout << "[UI] CONTINUAR\n";
+}
+
+// Reinicia el proceso lo mas rapido posible (re-exec del mismo .exe, mismo cwd).
+// Ideal para iterar iluminacion: recompilas, pausas, REINICIAR y entras de nuevo con LIGHTING_FAST_LOAD.
+static void restartApplicationFast()
+{
+    std::cout << "[UI] REINICIAR: recargando aplicacion...\n";
+    AudioBgm_Shutdown();
+
+#ifdef _WIN32
+    char path[MAX_PATH];
+    DWORD n = GetModuleFileNameA(NULL, path, MAX_PATH);
+    if (n == 0 || n >= MAX_PATH)
+    {
+        std::cerr << "[UI] REINICIAR fallo: no se pudo obtener la ruta del ejecutable.\n";
+        return;
+    }
+
+    // Cerrar GLFW antes de re-exec para no dejar ventana/contexto colgados
+    glfwTerminate();
+
+    // Reemplaza este proceso por uno nuevo (cwd se conserva -> models/shaders/sounds OK)
+    intptr_t r = _execl(path, path, (char*)nullptr);
+    (void)r;
+    // Si llegamos aqui, _execl fallo
+    std::cerr << "[UI] REINICIAR fallo (_execl). Codigo errno puede indicar causa.\n";
+    std::exit(1);
+#else
+    // Fallback no-Windows: solo cierra (el usuario relanza a mano)
+    std::cerr << "[UI] REINICIAR no implementado en esta plataforma; cerrando.\n";
+    std::exit(0);
+#endif
 }
 
 // ============================================================================
@@ -1784,10 +1917,15 @@ void processInput(GLFWwindow* window)
     // ----- PAUSA -----
     if (appState == AppState::Paused)
     {
+        static bool rWasDown = false;
+        const bool rDown = glfwGetKey(window, GLFW_KEY_R) == GLFW_PRESS;
         if (enterDown && !enterWasDown)
             resumeFromPause(window);
         if (escDown && !escWasDown)
             resumeFromPause(window); // Esc en pausa = continuar (tambien se puede salir con boton)
+        if (rDown && !rWasDown)
+            restartApplicationFast(); // R = recarga rapida del proceso
+        rWasDown = rDown;
         escWasDown = escDown;
         enterWasDown = enterDown;
         return;
@@ -1849,6 +1987,23 @@ void processInput(GLFWwindow* window)
             const float sway = std::sin(headBobTimer) * 0.055f * headBobAmount;
             const float bobY = std::sin(headBobTimer * 2.0f) * 0.035f * headBobAmount;
             headBobOffset = camera.Right * sway + camera.WorldUp * bobY;
+
+            // Pasos: un WAV de un solo paso, repitiendo al ritmo del bob (cada pie)
+            // Cruce por cero del sway = un pie toca el suelo (~2 veces por ciclo lateral).
+            static float prevSwaySin = 0.0f;
+            const float swaySin = std::sin(headBobTimer);
+            if (playerIsWalking && headBobAmount > 0.35f && appState == AppState::Playing)
+            {
+                const bool crossed =
+                    (prevSwaySin <= 0.0f && swaySin > 0.0f) ||
+                    (prevSwaySin >= 0.0f && swaySin < 0.0f);
+                if (crossed)
+                    AudioBgm_PlaySfx("sounds/footstep.wav", 0.275f); // mitad del volumen anterior
+            }
+            if (!playerIsWalking)
+                prevSwaySin = 0.0f;
+            else
+                prevSwaySin = swaySin;
         }
 
         static bool fKeyWasPressed = false;
@@ -1859,6 +2014,8 @@ void processInput(GLFWwindow* window)
                 if (!fKeyWasPressed)
                 {
                     flashlightOn = !flashlightOn;
+                    // Mismo click FNAF al prender y al apagar
+                    AudioBgm_PlaySfx("sounds/flashlight.mp3", 0.9f);
                     fKeyWasPressed = true;
                 }
             }
@@ -1903,7 +2060,14 @@ void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
     }
     else if (uiHitSecondaryButton(mx, my))
     {
-        glfwSetWindowShouldClose(window, true);
+        if (appState == AppState::Paused)
+            restartApplicationFast(); // REINICIAR
+        else
+            glfwSetWindowShouldClose(window, true); // menu inicio: SALIR
+    }
+    else if (appState == AppState::Paused && uiHitTertiaryButton(mx, my))
+    {
+        glfwSetWindowShouldClose(window, true); // SALIR
     }
 }
 
