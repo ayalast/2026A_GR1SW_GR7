@@ -56,10 +56,9 @@ static float fadeBlack = 1.0f;          // 1 = negro total, 0 = sin overlay
 static const float FADE_IN_SECONDS = 0.65f; // fundido rapido (< 1 s)
 static bool uiClickLatch = false;       // evita multi-click el mismo frame
 
-// Streaming / culling por distancia (mismos modelos; solo carga y dibuja lo cercano)
-static const float STREAM_LOAD_RADIUS   = 55.0f; // carga el modelo al acercarte
-static const float STREAM_DRAW_RADIUS   = 48.0f; // no dibuja instancias lejanas
-static const float STREAM_SHADOW_RADIUS = 28.0f; // sombras solo cerca
+// Culling por distancia al DIBUJAR (no carga en caliente: evita freezes al caminar)
+static const float STREAM_DRAW_RADIUS   = 55.0f; // no dibuja instancias muy lejanas
+static const float STREAM_SHADOW_RADIUS = 32.0f; // sombras solo cerca
 static const float STREAM_LIGHT_RADIUS  = 52.0f; // point lights del techo relevantes
 static const int   STREAM_MAX_POINT_LIGHTS = 36;
 
@@ -82,14 +81,13 @@ CollisionManager colManager;
 
 bool flashlightOn = false;
 
-// UI: fracciones de pantalla (menu 1920x1080). Botones centrados.
-// COMENZAR/CONTINUAR ~ y = 0.5 + 60/1080 ≈ 0.556  |  SALIR ≈ 0.648
+// UI hitboxes (menu 1920x1080): botones en y ≈ 0.546 y 0.634
 static bool uiHitPrimaryButton(double mx, double my)
 {
     if (SCR_WIDTH == 0 || SCR_HEIGHT == 0) return false;
     double nx = mx / (double)SCR_WIDTH;
     double ny = my / (double)SCR_HEIGHT;
-    const double cx = 0.5, cy = 0.556, hw = 0.11, hh = 0.042;
+    const double cx = 0.5, cy = 0.546, hw = 0.115, hh = 0.04;
     return nx > cx - hw && nx < cx + hw && ny > cy - hh && ny < cy + hh;
 }
 static bool uiHitSecondaryButton(double mx, double my)
@@ -97,7 +95,7 @@ static bool uiHitSecondaryButton(double mx, double my)
     if (SCR_WIDTH == 0 || SCR_HEIGHT == 0) return false;
     double nx = mx / (double)SCR_WIDTH;
     double ny = my / (double)SCR_HEIGHT;
-    const double cx = 0.5, cy = 0.648, hw = 0.11, hh = 0.042;
+    const double cx = 0.5, cy = 0.634, hw = 0.115, hh = 0.04;
     return nx > cx - hw && nx < cx + hw && ny > cy - hh && ny < cy + hh;
 }
 
@@ -1006,24 +1004,30 @@ int main() {
         if (progress01 > 0.001f)
             drawNdcTexturedQuad(barX0, barY0, fillX1, barY1, barFillTex, 0, 0, 1, 1, 1.0f);
 
-        // Porcentaje grande debajo de la barra
-        drawPercentNumber(pct, 0.0f, -0.36f, 0.045f, 0.07f);
+        // Porcentaje (dígitos monoespaciados, sin gaps raros)
+        drawPercentNumber(pct, 0.0f, -0.38f, 0.038f, 0.065f);
 
         glfwSwapBuffers(window);
         return true;
     };
 
-    // Pesos relativos por etapa (aproximan tiempo real de I/O + Assimp + CPU)
+    // Pesos relativos por etapa (incluyen props: se cargan AQUI, no al caminar)
     // Suma = 1.0
-    const float W_SHADERS = 0.04f;
-    const float W_COLLISION = 0.18f;
-    const float W_LEVEL = 0.30f;
-    const float W_BORDER = 0.12f;
-    const float W_LIGHTS = 0.18f;
-    const float W_AUDIO = 0.06f;
-    const float W_SPAWN = 0.04f;
-    const float W_UI = 0.03f;
-    const float W_SETTLE = 0.05f; // espera final antes del menu
+    const float W_SHADERS = 0.03f;
+    const float W_COLLISION = 0.10f;
+    const float W_LEVEL = 0.16f;
+    const float W_BORDER = 0.07f;
+    const float W_LIGHTS = 0.09f;
+    const float W_AUDIO = 0.04f;
+    const float W_CAMS = 0.12f;
+    const float W_OFFICE = 0.14f;
+    const float W_BOXES = 0.04f;
+    const float W_DEMON = 0.04f;
+    const float W_COMP = 0.05f;
+    const float W_BOOTHS = 0.07f;
+    const float W_SPAWN = 0.02f;
+    const float W_UI = 0.02f;
+    const float W_SETTLE = 0.01f;
     float progressBase = 0.0f;
 
     static unsigned int blackTex = 0;
@@ -1130,7 +1134,7 @@ int main() {
     progressBase += W_AUDIO;
     if (!drawSplashFrame("Backrooms - Audio listo", progressBase)) { AudioBgm_Shutdown(); glfwTerminate(); return 0; }
 
-    // Anclas (posiciones planificadas) para streamear props durante el juego
+    // Anclas de props (mismas del proyecto del grupo)
     const std::vector<glm::vec3> officeAnchors = {
         glm::vec3(roomCenter.x - 40.0f, 0.0f, roomCenter.z - 24.0f),
         glm::vec3(roomCenter.x + 12.0f, 0.0f, roomCenter.z - 20.0f),
@@ -1162,25 +1166,6 @@ int main() {
     };
     const std::vector<float> computerYaws = { 35.0f, -35.0f, 145.0f, -145.0f };
 
-    std::vector<glm::vec3> boothLoadAnchors;
-    {
-        const float minX = roomWorldBounds.min.x + 20.0f;
-        const float maxX = roomWorldBounds.max.x - 20.0f;
-        const float minZ = roomWorldBounds.min.z + 20.0f;
-        const float maxZ = roomWorldBounds.max.z - 20.0f;
-        for (int i = 0; i < 8; ++i)
-        {
-            float t = (i + 0.5f) / 8.0f;
-            boothLoadAnchors.emplace_back(minX + t * (maxX - minX), 0.0f, minZ + t * (maxZ - minZ));
-            boothLoadAnchors.emplace_back(minX + t * (maxX - minX), 0.0f, maxZ - t * (maxZ - minZ));
-        }
-    }
-
-    // Camaras: NO incluir spawn/center al inicio (evita cargar 200 camaras en el primer frame de juego)
-    std::vector<glm::vec3> cameraLoadAnchors;
-    for (size_t i = 0; i < wallAnchors.size() && cameraLoadAnchors.size() < 32; i += std::max<size_t>(1, wallAnchors.size() / 32))
-        cameraLoadAnchors.push_back((wallAnchors[i].min + wallAnchors[i].max) * 0.5f);
-
     std::vector<CameraInstance> cameraInstances;
     std::vector<Instance> officeInstances;
     std::vector<Instance> boxesInstances;
@@ -1189,90 +1174,81 @@ int main() {
     std::vector<Instance> boothInstances;
     std::vector<glm::vec3> deskLampPositions;
 
-    bool camsReady = false, officeReady = false, boxesReady = false;
-    bool demonReady = false, computersReady = false, boothsReady = false;
+    // === PRECARGA DE PROPS EN SPLASH (como el repo original: todo listo antes de jugar) ===
+    // El stream al caminar causaba freezes al cargar Assimp en el hilo principal.
+    if (!drawSplashFrame("Backrooms - Cargando camaras...", progressBase + W_CAMS * 0.2f)) { AudioBgm_Shutdown(); glfwTerminate(); return 0; }
+    surveillanceCameraModel = std::make_unique<Model>("models/surveillance_camera/camaras_vigilancia.obj");
+    {
+        const AABB cameraBounds = computeModelBounds(*surveillanceCameraModel);
+        const float wallAttachBase = (-cameraBounds.min.z * cameraScale) + cameraWallGap;
+        CameraPlacementConfig cameraCfg;
+        cameraCfg.targetCount = 200;
+        cameraInstances = generateCameraInstances(wallAnchors, roomCenter, wallAttachBase, cameraCfg);
+        addFurnitureCollisions(colManager, cameraBounds, cameraInstances, glm::vec3(cameraScale));
+    }
+    progressBase += W_CAMS;
+    if (!drawSplashFrame("Backrooms - Camaras listas", progressBase)) { AudioBgm_Shutdown(); glfwTerminate(); return 0; }
+    std::cout << "[Load] Camaras: " << cameraInstances.size() << "\n";
 
-    std::cout << "[Load] Jugable. Props se cargan al explorar (radio " << STREAM_LOAD_RADIUS << ")\n";
+    if (!drawSplashFrame("Backrooms - Cargando oficina...", progressBase + W_OFFICE * 0.15f)) { AudioBgm_Shutdown(); glfwTerminate(); return 0; }
+    officeFurnitureModel = std::make_unique<Model>("models/office_furniture/office.obj");
+    {
+        const AABB officeBounds = computeModelBounds(*officeFurnitureModel);
+        officeInstances = createFloorInstances(officeAnchors, roomWorldBounds, officeBounds, floorY, 3.0f, officeYaws, 0.45f);
+        addInstancesCollision(colManager, *officeFurnitureModel, officeInstances);
+        glm::vec3 localLampCenter = findLocalLampCenter(*officeFurnitureModel);
+        deskLampPositions.clear();
+        for (const Instance& instance : officeInstances)
+        {
+            glm::vec3 worldLampPos = glm::vec3(buildInstanceMatrix(instance) * glm::vec4(localLampCenter, 1.0f));
+            deskLampPositions.push_back(worldLampPos);
+        }
+    }
+    progressBase += W_OFFICE;
+    if (!drawSplashFrame("Backrooms - Oficina lista", progressBase)) { AudioBgm_Shutdown(); glfwTerminate(); return 0; }
+    std::cout << "[Load] Oficina: " << officeInstances.size() << "\n";
 
-    auto tryStreamAssets = [&]() {
-        // Una carga pesada por llamada (durante el juego, entre frames)
-        if (!camsReady && nearAnyXZ(camera.Position, cameraLoadAnchors, STREAM_LOAD_RADIUS))
-        {
-            std::cout << "[Stream] Cargando camaras de vigilancia...\n";
-            surveillanceCameraModel = std::make_unique<Model>("models/surveillance_camera/camaras_vigilancia.obj");
-            const AABB cameraBounds = computeModelBounds(*surveillanceCameraModel);
-            const float wallAttachBase = (-cameraBounds.min.z * cameraScale) + cameraWallGap;
-            CameraPlacementConfig cameraCfg;
-            cameraCfg.targetCount = 200;
-            cameraInstances = generateCameraInstances(wallAnchors, roomCenter, wallAttachBase, cameraCfg);
-            addFurnitureCollisions(colManager, cameraBounds, cameraInstances, glm::vec3(cameraScale));
-            camsReady = true;
-            std::cout << "[Stream] Camaras: " << cameraInstances.size() << "\n";
-            return;
-        }
-        if (!officeReady && nearAnyXZ(camera.Position, officeAnchors, STREAM_LOAD_RADIUS))
-        {
-            std::cout << "[Stream] Cargando muebles de oficina...\n";
-            officeFurnitureModel = std::make_unique<Model>("models/office_furniture/office.obj");
-            const AABB officeBounds = computeModelBounds(*officeFurnitureModel);
-            officeInstances = createFloorInstances(officeAnchors, roomWorldBounds, officeBounds, floorY, 3.0f, officeYaws, 0.45f);
-            addInstancesCollision(colManager, *officeFurnitureModel, officeInstances);
-            glm::vec3 localLampCenter = findLocalLampCenter(*officeFurnitureModel);
-            deskLampPositions.clear();
-            for (const Instance& instance : officeInstances)
-            {
-                glm::vec3 worldLampPos = glm::vec3(buildInstanceMatrix(instance) * glm::vec4(localLampCenter, 1.0f));
-                deskLampPositions.push_back(worldLampPos);
-            }
-            officeReady = true;
-            std::cout << "[Stream] Oficina lista (" << officeInstances.size() << ")\n";
-            return;
-        }
-        if (!boxesReady && nearAnyXZ(camera.Position, boxesAnchors, STREAM_LOAD_RADIUS))
-        {
-            std::cout << "[Stream] Cargando cajas...\n";
-            oldPaperBoxesModel = std::make_unique<Model>("models/old_paper__cardboard_boxes/carton_papel.obj");
-            const AABB boxesBounds = computeModelBounds(*oldPaperBoxesModel, true);
-            boxesInstances = createFloorInstances(boxesAnchors, roomWorldBounds, boxesBounds, floorY, 2.2f, boxesYaws, 0.35f);
-            addInstancesCollision(colManager, *oldPaperBoxesModel, boxesInstances, true);
-            boxesReady = true;
-            std::cout << "[Stream] Cajas listas\n";
-            return;
-        }
-        if (!demonReady && nearAnyXZ(camera.Position, demonAnchors, STREAM_LOAD_RADIUS))
-        {
-            std::cout << "[Stream] Cargando entidad...\n";
-            monsterAlienModel = std::make_unique<Model>("models/monster_alien/scene.obj");
-            const AABB demonBounds = computeModelBounds(*monsterAlienModel);
-            demonInstances = createFloorInstances(demonAnchors, roomWorldBounds, demonBounds, floorY, 1.8f, demonYaws, 0.45f);
-            addInstancesCollision(colManager, *monsterAlienModel, demonInstances);
-            demonReady = true;
-            std::cout << "[Stream] Entidad lista (" << demonInstances.size() << ")\n";
-            return;
-        }
-        if (!computersReady && nearAnyXZ(camera.Position, computerAnchors, STREAM_LOAD_RADIUS))
-        {
-            std::cout << "[Stream] Cargando computadoras...\n";
-            sciFiComputerModel = std::make_unique<Model>("models/sci-fi_computer/computadora.obj");
-            const AABB computerBounds = computeModelBounds(*sciFiComputerModel);
-            computerInstances = createFloorInstances(computerAnchors, roomWorldBounds, computerBounds, floorY, 1.0f, computerYaws, 0.35f);
-            addInstancesCollision(colManager, *sciFiComputerModel, computerInstances);
-            computersReady = true;
-            std::cout << "[Stream] Computadoras listas\n";
-            return;
-        }
-        if (!boothsReady && nearAnyXZ(camera.Position, boothLoadAnchors, STREAM_LOAD_RADIUS))
-        {
-            std::cout << "[Stream] Cargando cabinas telefonicas...\n";
-            publicPhoneBoothModel = std::make_unique<Model>("models/public_phone_booth/public_phone.obj");
-            const AABB boothBounds = computeModelBounds(*publicPhoneBoothModel);
-            boothInstances = generatePhoneBooths(roomWorldBounds, boothBounds, floorY, 50);
-            addInstancesCollision(colManager, *publicPhoneBoothModel, boothInstances);
-            boothsReady = true;
-            std::cout << "[Stream] Cabinas: " << boothInstances.size() << "\n";
-            return;
-        }
-    };
+    if (!drawSplashFrame("Backrooms - Cargando cajas...", progressBase + W_BOXES * 0.3f)) { AudioBgm_Shutdown(); glfwTerminate(); return 0; }
+    oldPaperBoxesModel = std::make_unique<Model>("models/old_paper__cardboard_boxes/carton_papel.obj");
+    {
+        const AABB boxesBounds = computeModelBounds(*oldPaperBoxesModel, true);
+        boxesInstances = createFloorInstances(boxesAnchors, roomWorldBounds, boxesBounds, floorY, 2.2f, boxesYaws, 0.35f);
+        addInstancesCollision(colManager, *oldPaperBoxesModel, boxesInstances, true);
+    }
+    progressBase += W_BOXES;
+    if (!drawSplashFrame("Backrooms - Cajas listas", progressBase)) { AudioBgm_Shutdown(); glfwTerminate(); return 0; }
+
+    if (!drawSplashFrame("Backrooms - Cargando entidad...", progressBase + W_DEMON * 0.3f)) { AudioBgm_Shutdown(); glfwTerminate(); return 0; }
+    monsterAlienModel = std::make_unique<Model>("models/monster_alien/scene.obj");
+    {
+        const AABB demonBounds = computeModelBounds(*monsterAlienModel);
+        demonInstances = createFloorInstances(demonAnchors, roomWorldBounds, demonBounds, floorY, 1.8f, demonYaws, 0.45f);
+        addInstancesCollision(colManager, *monsterAlienModel, demonInstances);
+    }
+    progressBase += W_DEMON;
+    if (!drawSplashFrame("Backrooms - Entidad lista", progressBase)) { AudioBgm_Shutdown(); glfwTerminate(); return 0; }
+
+    if (!drawSplashFrame("Backrooms - Cargando computadoras...", progressBase + W_COMP * 0.3f)) { AudioBgm_Shutdown(); glfwTerminate(); return 0; }
+    sciFiComputerModel = std::make_unique<Model>("models/sci-fi_computer/computadora.obj");
+    {
+        const AABB computerBounds = computeModelBounds(*sciFiComputerModel);
+        computerInstances = createFloorInstances(computerAnchors, roomWorldBounds, computerBounds, floorY, 1.0f, computerYaws, 0.35f);
+        addInstancesCollision(colManager, *sciFiComputerModel, computerInstances);
+    }
+    progressBase += W_COMP;
+    if (!drawSplashFrame("Backrooms - Computadoras listas", progressBase)) { AudioBgm_Shutdown(); glfwTerminate(); return 0; }
+
+    if (!drawSplashFrame("Backrooms - Cargando cabinas...", progressBase + W_BOOTHS * 0.2f)) { AudioBgm_Shutdown(); glfwTerminate(); return 0; }
+    publicPhoneBoothModel = std::make_unique<Model>("models/public_phone_booth/public_phone.obj");
+    {
+        const AABB boothBounds = computeModelBounds(*publicPhoneBoothModel);
+        boothInstances = generatePhoneBooths(roomWorldBounds, boothBounds, floorY, 50);
+        addInstancesCollision(colManager, *publicPhoneBoothModel, boothInstances);
+    }
+    progressBase += W_BOOTHS;
+    if (!drawSplashFrame("Backrooms - Cabinas listas", progressBase)) { AudioBgm_Shutdown(); glfwTerminate(); return 0; }
+    std::cout << "[Load] Cabinas: " << boothInstances.size() << "\n";
+    std::cout << "[Load] Todos los props precargados (sin stream al caminar).\n";
 
     // --- Spawn ---
     // GitHub a7354ab: Camera(0, 0, 3), Yaw=-90, Pitch=0  -> altura Y=0 (CORRECTA a escala del mapa).
@@ -1484,9 +1460,6 @@ int main() {
             }
         }
 
-        // Streaming solo cuando ya se juega / funde
-        tryStreamAssets();
-
         glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
 
@@ -1606,18 +1579,18 @@ int main() {
         backroomsModel->Draw(*backroomsShader);
         border->Draw(*backroomsShader);
 
-        // Props solo si ya se streamearon + culling por distancia
-        if (camsReady && surveillanceCameraModel)
+        // Props (ya precargados) + culling por distancia al dibujar
+        if (surveillanceCameraModel)
             drawCameraInstances(*backroomsShader, *surveillanceCameraModel, cameraInstances, glm::vec3(1.0f), STREAM_DRAW_RADIUS);
-        if (officeReady && officeFurnitureModel)
+        if (officeFurnitureModel)
             drawInstances(*backroomsShader, *officeFurnitureModel, officeInstances, false, STREAM_DRAW_RADIUS);
-        if (boxesReady && oldPaperBoxesModel)
+        if (oldPaperBoxesModel)
             drawInstances(*backroomsShader, *oldPaperBoxesModel, boxesInstances, true, STREAM_DRAW_RADIUS);
-        if (demonReady && monsterAlienModel)
+        if (monsterAlienModel)
             drawInstances(*backroomsShader, *monsterAlienModel, demonInstances, false, STREAM_DRAW_RADIUS);
-        if (computersReady && sciFiComputerModel)
+        if (sciFiComputerModel)
             drawInstances(*backroomsShader, *sciFiComputerModel, computerInstances, false, STREAM_DRAW_RADIUS);
-        if (boothsReady && publicPhoneBoothModel)
+        if (publicPhoneBoothModel)
             drawInstances(*backroomsShader, *publicPhoneBoothModel, boothInstances, false, STREAM_DRAW_RADIUS);
 
         // ============================================================================
@@ -1639,15 +1612,15 @@ int main() {
 
         cubeShader->setVec4("cubeColor", glm::vec4(0.0f, 0.0f, 0.0f, 0.50f));
 
-        if (officeReady && officeFurnitureModel)
+        if (officeFurnitureModel)
             drawPlanarShadows(*cubeShader, *officeFurnitureModel, officeInstances, floorY, lightDirection, false, STREAM_SHADOW_RADIUS);
-        if (boxesReady && oldPaperBoxesModel)
+        if (oldPaperBoxesModel)
             drawPlanarShadows(*cubeShader, *oldPaperBoxesModel, boxesInstances, floorY, lightDirection, true, STREAM_SHADOW_RADIUS);
-        if (demonReady && monsterAlienModel)
+        if (monsterAlienModel)
             drawPlanarShadows(*cubeShader, *monsterAlienModel, demonInstances, floorY, lightDirection, false, STREAM_SHADOW_RADIUS);
-        if (computersReady && sciFiComputerModel)
+        if (sciFiComputerModel)
             drawPlanarShadows(*cubeShader, *sciFiComputerModel, computerInstances, floorY, lightDirection, false, STREAM_SHADOW_RADIUS);
-        if (boothsReady && publicPhoneBoothModel)
+        if (publicPhoneBoothModel)
             drawPlanarShadows(*cubeShader, *publicPhoneBoothModel, boothInstances, floorY, lightDirection, false, STREAM_SHADOW_RADIUS);
 
         glDepthMask(GL_TRUE);
