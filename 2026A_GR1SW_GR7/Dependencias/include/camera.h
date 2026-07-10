@@ -70,22 +70,44 @@ public:
     }
 
     // processes input received from any keyboard-like input system. Accepts input parameter in the form of camera defined ENUM (to abstract it from windowing systems)
-    void ProcessKeyboard(Camera_Movement direction, float deltaTime, CollisionManager colManager)
+    // speedMul: 1.0 caminar, ~1.55 sprint (Ctrl+W)
+    void ProcessKeyboard(Camera_Movement direction, float deltaTime, CollisionManager colManager, float speedMul = 1.0f)
     {
-        float velocity = MovementSpeed * deltaTime;
-        glm::vec3 XZFront(Front.x, 0.0f, Front.z);
-        glm::vec3 XZRight(Right.x, 0.0f, Right.z);
+        if (speedMul < 0.1f) speedMul = 0.1f;
+        float velocity = MovementSpeed * speedMul * deltaTime;
+        // Movimiento SOLO en el plano del suelo (ignora Pitch).
+        // 1) Proyectar Front/Right a XZ y normalizar (velocidad constante).
+        // 2) Si se mira casi vertical (Front.xz ~ 0), usar Yaw.
+        glm::vec3 flatFront(Front.x, 0.0f, Front.z);
+        float lenF = glm::length(flatFront);
+        if (lenF > 0.05f)
+            flatFront /= lenF;
+        else
+        {
+            const float yawR = glm::radians(Yaw);
+            flatFront = glm::vec3(std::cos(yawR), 0.0f, std::sin(yawR));
+        }
+
+        glm::vec3 flatRight(Right.x, 0.0f, Right.z);
+        float lenR = glm::length(flatRight);
+        if (lenR > 0.05f)
+            flatRight /= lenR;
+        else
+        {
+            const float yawR = glm::radians(Yaw);
+            flatRight = glm::vec3(-std::sin(yawR), 0.0f, std::cos(yawR));
+        }
+
         glm::vec3 movement(0.0f);
 
         if (direction == FORWARD)
-            movement += XZFront * velocity;
-        
+            movement += flatFront * velocity;
         if (direction == BACKWARD)
-            movement -= XZFront * velocity;
+            movement -= flatFront * velocity;
         if (direction == LEFT)
-            movement -= XZRight * velocity;
+            movement -= flatRight * velocity;
         if (direction == RIGHT)
-            movement += XZRight * velocity;
+            movement += flatRight * velocity;
         
         movement = colManager.correctMovement(Position, movement, RADIUS);
         Position += movement;
