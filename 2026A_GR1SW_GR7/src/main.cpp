@@ -1508,6 +1508,9 @@ int main() {
         lastFrame = currentFrame;
         if (deltaTime > 0.1f) deltaTime = 0.1f;
 
+        // BGM: en juego hace rachas/silencios; en menu no hace nada (loop fijo)
+        AudioBgm_Update(deltaTime);
+
         processInput(window);
 
         // ---------- MENU / PAUSA: solo UI 2D (sin mundo 3D) ----------
@@ -1745,6 +1748,8 @@ static void startGameFromMenu(GLFWwindow* window)
     glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
     firstMouse = true;
     glfwSetWindowTitle(window, "Backrooms - Grupo 7");
+    // Mitad de volumen + musica por rachas (estilo Minecraft)
+    AudioBgm_EnterGameAmbient();
     std::cout << "[UI] COMENZAR -> fundido al juego\n";
 }
 
@@ -1849,6 +1854,23 @@ void processInput(GLFWwindow* window)
             const float sway = std::sin(headBobTimer) * 0.055f * headBobAmount;
             const float bobY = std::sin(headBobTimer * 2.0f) * 0.035f * headBobAmount;
             headBobOffset = camera.Right * sway + camera.WorldUp * bobY;
+
+            // Pasos: un WAV de un solo paso, repitiendo al ritmo del bob (cada pie)
+            // Cruce por cero del sway = un pie toca el suelo (~2 veces por ciclo lateral).
+            static float prevSwaySin = 0.0f;
+            const float swaySin = std::sin(headBobTimer);
+            if (playerIsWalking && headBobAmount > 0.35f && appState == AppState::Playing)
+            {
+                const bool crossed =
+                    (prevSwaySin <= 0.0f && swaySin > 0.0f) ||
+                    (prevSwaySin >= 0.0f && swaySin < 0.0f);
+                if (crossed)
+                    AudioBgm_PlaySfx("sounds/footstep.wav", 0.275f); // mitad del volumen anterior
+            }
+            if (!playerIsWalking)
+                prevSwaySin = 0.0f;
+            else
+                prevSwaySin = swaySin;
         }
 
         static bool fKeyWasPressed = false;
@@ -1859,6 +1881,8 @@ void processInput(GLFWwindow* window)
                 if (!fKeyWasPressed)
                 {
                     flashlightOn = !flashlightOn;
+                    // Mismo click FNAF al prender y al apagar
+                    AudioBgm_PlaySfx("sounds/flashlight.mp3", 0.9f);
                     fKeyWasPressed = true;
                 }
             }
