@@ -606,6 +606,7 @@ void drawInstances(Shader& shader, Model& model, const std::vector<Instance>& in
         }
         else
         {
+            
             model.Draw(shader);
         }
     }
@@ -1381,7 +1382,7 @@ int main() {
     if (!drawSplashFrame("Backrooms - Computadoras listas", progressBase)) { AudioBgm_Shutdown(); glfwTerminate(); return 0; }
 
     if (!drawSplashFrame("Backrooms - Cargando cabinas...", progressBase + W_BOOTHS * 0.2f)) { AudioBgm_Shutdown(); glfwTerminate(); return 0; }
-    publicPhoneBoothModel = std::make_unique<Model>("models/public_phone_booth/public_phone.obj");
+    publicPhoneBoothModel = std::make_unique<Model>("models/payphone/payphone.obj");
     {
         const AABB boothBounds = computeModelBounds(*publicPhoneBoothModel);
         boothInstances = generatePhoneBooths(roomWorldBounds, boothBounds, floorY, 50);
@@ -1669,7 +1670,7 @@ int main() {
         }
         std::sort(nearLightIndices.begin(), nearLightIndices.end(), [&](size_t a, size_t b) {
             return distXZ(camera.Position, ceilingLights[a].position) < distXZ(camera.Position, ceilingLights[b].position);
-        });
+            });
 
         for (size_t si = 0; si < nearLightIndices.size() && lightIndex < STREAM_MAX_POINT_LIGHTS; si++)
         {
@@ -1814,7 +1815,11 @@ int main() {
         if (sciFiComputerModel)
             drawPlanarShadows(*cubeShader, *sciFiComputerModel, computerInstances, floorY, lightDirection, false, STREAM_SHADOW_RADIUS);
         if (publicPhoneBoothModel)
+        {
+            model = glm::scale(model, glm::vec3(0.1f, 0.1f, 0.1f));
             drawPlanarShadows(*cubeShader, *publicPhoneBoothModel, boothInstances, floorY, lightDirection, false, STREAM_SHADOW_RADIUS);
+        }
+            
 
         glDepthMask(GL_TRUE);
         glDisable(GL_STENCIL_TEST);
