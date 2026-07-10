@@ -47,6 +47,8 @@ uniform sampler2D texture_diffuse1;
 uniform sampler2D texture_specular1;
 uniform float shininess;
 uniform bool use_specular_map;
+// true = muros del nivel Backrooms. false = props (escritorio, cajas, etc.)
+uniform bool applyLevelWallpaper;
 
 vec3 CalcDirLight(DirLight light, vec3 normal, vec3 viewDir, vec3 albedo);
 vec3 CalcPointLight(PointLight light, vec3 normal, vec3 fragPos, vec3 viewDir, vec3 albedo, bool isCeiling);
@@ -54,71 +56,118 @@ vec3 CalcSpotLight(SpotLight light, vec3 normal, vec3 fragPos, vec3 viewDir, vec
 
 void main()
 {
+    // 1.0 = panal | ~0.58 = intermedio | ~0.30 = lavado (solo nivel)
+    const float WALL_PATTERN_STRENGTH = 0.58;
+
     vec3 albedo = vec3(texture(texture_diffuse1, TexCoords));
     vec3 norm = normalize(Normal);
 
-    // Techo: caras traseras o normales mirando hacia abajo
-    bool isCeiling = (!gl_FrontFacing) || (norm.y < -0.45);
+    // Invertir back-face PRIMERO; techo solo por normal (no gl_FrontFacing).
     if (!gl_FrontFacing)
         norm = -norm;
-    if (isCeiling && norm.y > 0.0)
-        norm = -norm;
 
-    // Suelo: normal hacia arriba
-    bool isFloor = (!isCeiling) && (norm.y > 0.55);
+    bool isCeiling = (norm.y < -0.45);
+    bool isFloor   = (norm.y > 0.55);
+    bool isWall    = (!isCeiling) && (!isFloor);
+    // Wallpaper SOLO en el mapa; no cajones/rollos de props
+    bool levelWall = applyLevelWallpaper && isWall;
+
+    if (levelWall)
+    {
+        float aL = max(dot(albedo, vec3(0.299, 0.587, 0.114)), 1e-4);
+        vec3 chroma = albedo / aL;
+        float softL = mix(0.52, aL, WALL_PATTERN_STRENGTH);
+        albedo = chroma * softL;
+    }
 
     vec3 viewDir = normalize(viewPos - FragPos);
 
-    vec3 result = CalcDirLight(dirLight, norm, viewDir, albedo);
+    // levelWall: luz en blanco + reaplicar albedo. Props: albedo real.
+    vec3 shadeAlbedo = levelWall ? vec3(1.0) : albedo;
+
+    vec3 result = CalcDirLight(dirLight, norm, viewDir, shadeAlbedo);
 
     int lightsToCount = numActivePointLights;
     if (lightsToCount > NR_POINT_LIGHTS)
         lightsToCount = NR_POINT_LIGHTS;
 
+    // Point lights + soft-knee (evita pared final blanca)
+    vec3 pointAccum = vec3(0.0);
     for (int i = 0; i < lightsToCount; i++)
-        result += CalcPointLight(pointLights[i], norm, FragPos, viewDir, albedo, isCeiling);
+        pointAccum += CalcPointLight(pointLights[i], norm, FragPos, viewDir, shadeAlbedo, isCeiling);
 
-    result += CalcSpotLight(spotLight, norm, FragPos, viewDir, albedo);
+    {
+        float pLuma = max(dot(pointAccum, vec3(0.299, 0.587, 0.114)), 0.0);
+        float knee = 0.72;
+        float compress = (pLuma <= knee)
+            ? pLuma
+            : knee + (pLuma - knee) / (1.0 + (pLuma - knee) * 2.4);
+        compress = compress / (1.0 + compress * 0.55);
+        float scale = (pLuma > 1e-5) ? (compress / pLuma) : 1.0;
+        if (!isCeiling)
+            scale *= 0.92;
+        pointAccum *= scale;
+    }
+    result += pointAccum;
 
-    // --- Paneles de techo: emision solo si hay luz real; apagados en dark ---
-    // Los cuadrados blancos son albedo del mesh; sin esto se ven "encendidos" en zonas oscuras.
+    result += CalcSpotLight(spotLight, norm, FragPos, viewDir, shadeAlbedo);
+
+    if (levelWall)
+    {
+        float lightAmt = max(dot(result, vec3(0.299, 0.587, 0.114)), 0.0);
+        result = albedo * lightAmt;
+    }
+
+    float distToCamera = length(viewPos - FragPos);
+
+    // Paneles de techo (nivel); en props isCeiling casi no aplica
     if (isCeiling)
     {
         float litAmount = length(result);
-        // Mas estricto: paneles no brillan con luz residual debil
-        float litMask = smoothstep(0.04, 0.18, litAmount);
+        float litMask = smoothstep(0.08, 0.28, litAmount);
 
-        // Texels muy claros = panel fluorescente (vs rejilla gris del techo)
         float luma = dot(albedo, vec3(0.299, 0.587, 0.114));
         float panelMask = smoothstep(0.55, 0.82, luma);
 
-        // Boost + auto-emision SOLO en paneles de zonas lit
-        result *= mix(1.0, 1.55, litMask * panelMask);
-        result += albedo * 0.38 * litMask * panelMask;
+        float nearVis = 1.0 - smoothstep(70.0, 150.0, distToCamera);
+        nearVis = nearVis * nearVis * (3.0 - 2.0 * nearVis);
 
-        // En dark: paneles blancos se apagan (gris humo), rejilla un poco menos
-        float darkPanel = (1.0 - litMask);
-        result *= mix(1.0, mix(0.55, 0.12, panelMask), darkPanel);
+        float glow = litMask * nearVis;
+
+        result *= mix(1.0, 1.45, glow * panelMask);
+        result += albedo * 0.32 * glow * panelMask;
+
+        float darkPanel = 1.0 - glow;
+        result *= mix(1.0, mix(0.40, 0.035, panelMask), darkPanel);
+
+        float ceilExtinct = smoothstep(85.0, 165.0, distToCamera);
+        result *= (1.0 - ceilExtinct * 0.88);
     }
 
-    // Relleno muy suave en paredes/suelo para evitar triangulos negros duros
-    // (no elimina el contraste lit/dark; solo evita negro de video)
     if (!isCeiling)
     {
-        float fill = isFloor ? 0.018 : 0.028;
+        float fill = isFloor ? 0.014 : 0.020;
         result += albedo * fill;
     }
 
+    if (levelWall)
+    {
+        float aL = max(dot(albedo, vec3(0.299, 0.587, 0.114)), 1e-4);
+        float rL = max(dot(result, vec3(0.299, 0.587, 0.114)), 0.0);
+        result = albedo * (rL / aL);
+    }
+
     // Niebla a distancia
-    float distToCamera = length(viewPos - FragPos);
-    float fogStart = 70.0;
-    float fogEnd = 160.0;
+    float fogStart = 75.0;
+    float fogEnd = 165.0;
     float fogFactor = smoothstep(fogStart, fogEnd, distToCamera);
     result = mix(result, vec3(0.0), fogFactor);
 
-    // Evitar saturacion
-    result = min(result, vec3(1.05));
-    result = result / (result + vec3(0.35)) * 1.15;
+    // Tone map por luminancia (no por canal: no reintroduce panal)
+    float lumaIn = max(dot(result, vec3(0.299, 0.587, 0.114)), 1e-5);
+    float mapped = (lumaIn / (lumaIn + 0.62)) * 1.22;
+    mapped = min(mapped, 0.92 + mapped * 0.06);
+    result = result * (mapped / lumaIn);
     result = clamp(result, 0.0, 1.0);
 
     FragColor = vec4(result, 1.0);
@@ -127,7 +176,6 @@ void main()
 vec3 CalcDirLight(DirLight light, vec3 normal, vec3 viewDir, vec3 albedo)
 {
     vec3 lightDir = normalize(-light.direction);
-    // Half-Lambert: suaviza bordes duros en paredes (menos triangulos negros)
     float ndotl = dot(normal, lightDir);
     float diff = ndotl * 0.5 + 0.5;
     diff = diff * diff;
@@ -143,42 +191,80 @@ vec3 CalcDirLight(DirLight light, vec3 normal, vec3 viewDir, vec3 albedo)
 
 vec3 CalcPointLight(PointLight light, vec3 normal, vec3 fragPos, vec3 viewDir, vec3 albedo, bool isCeiling)
 {
-    vec3 lightDir = normalize(light.position - fragPos);
+    vec3 toLight = light.position - fragPos;
+    float distance = length(toLight);
+    vec3 lightDir = toLight / max(distance, 1e-4);
     float ndotl = dot(normal, lightDir);
 
-    // Paredes: half-Lambert para penumbra natural
-    float diff = ndotl * 0.5 + 0.5;
-    diff = diff * diff;
+    // Misma clasificacion que main() (sin gl_FrontFacing)
+    bool isFloorSurf = (!isCeiling) && (normal.y > 0.55);
+    bool isWall = (!isCeiling) && (!isFloorSurf);
 
-    // Techos: wrap moderado (no tan agresivo como antes: menos techo blanco en dark vecino)
+    float diff;
+    float shape = 1.0;
+
     if (isCeiling || normal.y < -0.35)
     {
         float wrap = max(ndotl, 0.0) * 0.40 + 0.60;
         float ceilDiff = wrap * 0.55;
         if (light.position.y <= fragPos.y + 0.75)
             ceilDiff = max(ceilDiff, 0.48);
-        diff = max(diff * 0.35, ceilDiff);
+        float hl = ndotl * 0.5 + 0.5;
+        hl = hl * hl;
+        diff = max(hl * 0.35, ceilDiff);
+    }
+    else if (isWall)
+    {
+        // Charcos redondos en el plano de la pared (no triangulos de Lambert)
+        float planeOff = abs(dot(toLight, normal));
+        vec3 onPlane = toLight - normal * dot(toLight, normal);
+        float radial = length(onPlane);
+
+        float sigma = 5.2 + planeOff * 0.42;
+        float circle = exp(-(radial * radial) / (2.0 * sigma * sigma));
+        float outer = 1.0 - smoothstep(sigma * 0.9, sigma * 2.4, radial);
+
+        shape = max(circle, outer * 0.40);
+        shape = clamp(shape, 0.0, 1.0);
+
+        float facing = 0.55 + 0.45 * max(ndotl, 0.0);
+        diff = facing;
+    }
+    else if (isFloorSurf)
+    {
+        float hl = ndotl * 0.5 + 0.5;
+        diff = hl * hl;
+        float horiz = length(vec2(toLight.x, toLight.z));
+        float floorCircle = exp(-(horiz * horiz) / (2.0 * 7.5 * 7.5));
+        shape = mix(0.55, 1.0, floorCircle);
+    }
+    else
+    {
+        float hl = ndotl * 0.5 + 0.5;
+        diff = hl * hl;
     }
 
     vec3 reflectDir = reflect(-lightDir, normal);
     float spec = pow(max(dot(viewDir, reflectDir), 0.0), shininess);
-    float distance = length(light.position - fragPos);
-    // Atenuacion un poco mas suave que antes (bordes de charco menos cortantes)
-    float attenuation = 1.0 / (light.constant + light.linear * distance + light.quadratic * (distance * distance));
 
-    vec3 ambient = light.ambient * albedo;
-    vec3 diffuse = light.diffuse * diff * albedo;
+    float attenPhys = 1.0 / (light.constant + light.linear * distance
+                           + light.quadratic * (distance * distance));
+    float attenuation = isWall ? pow(max(attenPhys, 1e-6), 0.82) : attenPhys;
+
+    float ambShape = isWall ? mix(0.35, 0.85, shape) : 1.0;
+    float difShape = isWall ? shape : shape;
+
+    vec3 ambient = light.ambient * albedo * attenuation * ambShape;
+    vec3 diffuse = light.diffuse * diff * albedo * attenuation * difShape;
+    // Specular bajo en paredes: no remarcar flechas del wallpaper
     vec3 specularValue = use_specular_map ? vec3(texture(texture_specular1, TexCoords)) : vec3(0.1);
-    vec3 specular = light.specular * spec * specularValue;
-    ambient *= attenuation;
-    diffuse *= attenuation;
-    specular *= attenuation;
+    float specMul = isWall ? 0.06 : 1.0;
+    vec3 specular = light.specular * spec * specularValue * attenuation * difShape * specMul;
     return (ambient + diffuse + specular);
 }
 
 vec3 CalcSpotLight(SpotLight light, vec3 normal, vec3 fragPos, vec3 viewDir, vec3 albedo)
 {
-    // Direccion del fragmento visto DESDE la linterna (eje del cono)
     vec3 toFrag = fragPos - light.position;
     float distance = length(toFrag);
     if (distance < 1e-4)
@@ -187,29 +273,22 @@ vec3 CalcSpotLight(SpotLight light, vec3 normal, vec3 fragPos, vec3 viewDir, vec
     vec3 spotDir = normalize(light.direction);
     vec3 rayDir = toFrag / distance;
 
-    // Angulo del cono: esto debe dominar el "circulo" (sigue la mirada)
     float theta = dot(rayDir, spotDir);
     float epsilon = light.cutOff - light.outerCutOff;
     float intensity = clamp((theta - light.outerCutOff) / max(epsilon, 1e-4), 0.0, 1.0);
-    // Curva mas marcada en el centro para que el circulo interior se note al mirar
     intensity = intensity * intensity;
 
-    // Si esta fuera del cono exterior, cero
     if (intensity <= 0.0)
         return vec3(0.0);
 
-    // Iluminacion de superficie (desde frag hacia la luz)
     vec3 lightDir = -rayDir;
     float ndotl = max(dot(normal, lightDir), 0.0);
-    // Un poco de wrap para no dejar agujeros negros en paredes de frente
     float diff = ndotl * 0.75 + 0.25;
 
     vec3 reflectDir = reflect(-lightDir, normal);
     float spec = pow(max(dot(viewDir, reflectDir), 0.0), shininess);
 
-    // Atenuacion por distancia: mas suave para que el angulo mande sobre el "punto mas cercano a la camara"
     float attenuation = 1.0 / (light.constant + light.linear * distance + light.quadratic * (distance * distance));
-    // Refuerzo angular extra: el hotspot sigue el centro del cono, no el pie de la normal a la pared
     float core = smoothstep(light.outerCutOff, light.cutOff, theta);
     core = core * core;
 

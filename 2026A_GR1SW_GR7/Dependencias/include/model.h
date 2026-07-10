@@ -212,6 +212,10 @@ unsigned int TextureFromFile(const char *path, const string &directory, bool gam
     glGenTextures(1, &textureID);
 
     int width, height, nrComponents;
+    // No heredar stbi_set_flip_vertically_on_load(true) del splash/UI.
+    // Assimp ya aplica aiProcess_FlipUVs; si ademas volteamos la imagen, las
+    // texturas de props (escritorio, cajas, etc.) quedan "corridas".
+    stbi_set_flip_vertically_on_load(false);
     unsigned char *data = stbi_load(filename.c_str(), &width, &height, &nrComponents, 0);
     if (data)
     {
