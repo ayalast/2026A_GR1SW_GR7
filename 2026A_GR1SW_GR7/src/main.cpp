@@ -695,8 +695,9 @@ void findCeilingLights(const Model& model, const glm::vec3& worldOffset, std::ve
 
     float ceilY = 8.565f + worldOffset.y - 1.2f;
 
-    // Zonas grandes: pasillos/cuartos enteros oscuros (no apagones salpicados por lámpara)
-    const float zoneSize = 28.0f;
+    // Zonas grandes: pasillos/cuartos enteros en negro (linterna justificada).
+    // Lit se mantiene casi igual; dark = 0 tubos ON (sin goteo de lámparas).
+    const float zoneSize = 34.0f;
     using ZoneKey = std::pair<int, int>;
     struct ZoneKeyHash
     {
@@ -720,12 +721,12 @@ void findCeilingLights(const Model& model, const glm::vec3& worldOffset, std::ve
             ZoneKey k = zoneKey(x, z);
             if (zoneIsDark.find(k) != zoneIsDark.end())
                 continue;
-            // ~38% de celdas oscuras de entrada
-            zoneIsDark[k] = roll(rng) < 0.38f;
+            // ~42% celdas oscuras de entrada (luego se agrupan en pasillos)
+            zoneIsDark[k] = roll(rng) < 0.42f;
         }
     }
 
-    // Segunda pasada: agrupar vecinos (manchas / pasillos continuos)
+    // Segunda pasada: agrupar vecinos (manchas / pasillos continuos negros)
     std::unordered_map<ZoneKey, bool, ZoneKeyHash> zoneDarkSmoothed = zoneIsDark;
     for (const auto& kv : zoneIsDark)
     {
@@ -743,16 +744,18 @@ void findCeilingLights(const Model& model, const glm::vec3& worldOffset, std::ve
                     darkNeighbors++;
             }
         }
-        // Si hay vecinos dark, tiende a oscurecer (pasillos negros continuos)
-        if (darkNeighbors >= 2)
+        // Con 1+ vecinos dark se expande (corredores negros más largos)
+        if (darkNeighbors >= 1)
             zoneDarkSmoothed[kv.first] = true;
-        // Si casi no hay vecinos dark y era dark aislado, a veces se apaga el "punto suelto"
-        else if (darkNeighbors == 0 && kv.second && roll(rng) < 0.45f)
+        // Dark aislado: a menudo se limpia (evita manchas de 1 celda)
+        else if (darkNeighbors == 0 && kv.second && roll(rng) < 0.55f)
             zoneDarkSmoothed[kv.first] = false;
     }
 
     int onCount = 0;
     int offCount = 0;
+    int darkZoneLights = 0;
+    int litZoneLights = 0;
     for (float x = xMin + spacingX * 0.5f + offsetX; x < xMax; x += spacingX)
     {
         for (float z = zMin + spacingZ * 0.5f + offsetZ; z < zMax; z += spacingZ)
@@ -765,13 +768,15 @@ void findCeilingLights(const Model& model, const glm::vec3& worldOffset, std::ve
 
             if (darkZone)
             {
-                // Zona oscura: casi todas apagadas (muy raro un tubo suelto)
-                cl.isOn = roll(rng) < 0.04f;
+                // Negro total: sin tubos ON (solo linterna / lámpara de escritorio cercana)
+                cl.isOn = false;
+                darkZoneLights++;
             }
             else
             {
-                // Zona lit: casi todas encendidas (algunos tubos muertos sueltos)
+                // Zona lit: casi todas encendidas (algunos tubos muertos sueltos) — sin tocar look lit
                 cl.isOn = roll(rng) > 0.08f;
+                litZoneLights++;
             }
 
             if (cl.isOn) onCount++;
@@ -781,7 +786,9 @@ void findCeilingLights(const Model& model, const glm::vec3& worldOffset, std::ve
     }
     std::cout << "Ceiling lights generated: " << lights.size()
               << " (ON=" << onCount << " OFF=" << offCount
-              << ", zonas dark/lit ~" << zoneSize << "u)\n";
+              << ", dark-zone slots=" << darkZoneLights
+              << ", lit-zone slots=" << litZoneLights
+              << ", zonas dark/lit ~" << zoneSize << "u, dark=0 tubes)\n";
 }
 
 
@@ -1658,10 +1665,10 @@ int main() {
         backroomsShader->setFloat("shininess", 30.0f);
         backroomsShader->setVec3("dirLight.direction", glm::vec3(-0.2f, -1.0f, -0.3f));
 
-        // Relleno global muy bajo: dark zones se quedan oscuras; el brillo lo dan point lights ON
-        backroomsShader->setVec3("dirLight.ambient", glm::vec3(0.010f, 0.009f, 0.008f));
-        backroomsShader->setVec3("dirLight.diffuse", glm::vec3(0.028f, 0.026f, 0.022f));
-        backroomsShader->setVec3("dirLight.specular", glm::vec3(0.04f, 0.04f, 0.035f));
+        // Casi sin relleno global: dark zones = negro (linterna); lit brilla solo con point lights ON
+        backroomsShader->setVec3("dirLight.ambient", glm::vec3(0.0015f, 0.0013f, 0.0011f));
+        backroomsShader->setVec3("dirLight.diffuse", glm::vec3(0.012f, 0.011f, 0.009f));
+        backroomsShader->setVec3("dirLight.specular", glm::vec3(0.02f, 0.02f, 0.018f));
         int lightIndex = 0;
 
         // Preferir luces ENCENDIDAS cercanas (no gastar slots en isOn=false)

@@ -144,9 +144,10 @@ void main()
         result *= (1.0 - ceilExtinct * 0.88);
     }
 
+    // Fill casi nulo: sin esto las dark zones nunca llegan a negro total (linterna)
     if (!isCeiling)
     {
-        float fill = isFloor ? 0.014 : 0.020;
+        float fill = isFloor ? 0.0025 : 0.0015;
         result += albedo * fill;
     }
 
