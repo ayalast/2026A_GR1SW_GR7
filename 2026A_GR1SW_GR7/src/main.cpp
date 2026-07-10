@@ -1655,18 +1655,18 @@ int main() {
         backroomsModel->Draw(*backroomsShader);
         border->Draw(*backroomsShader);
 
-        // Props streameados + culling por distancia al dibujar
-        if (camsReady && surveillanceCameraModel)
+        // Props (ya precargados) + culling por distancia al dibujar
+        if (surveillanceCameraModel)
             drawCameraInstances(*backroomsShader, *surveillanceCameraModel, cameraInstances, glm::vec3(1.0f), STREAM_DRAW_RADIUS);
-        if (officeReady && officeFurnitureModel)
+        if (officeFurnitureModel)
             drawInstances(*backroomsShader, *officeFurnitureModel, officeInstances, false, STREAM_DRAW_RADIUS);
-        if (boxesReady && oldPaperBoxesModel)
+        if (oldPaperBoxesModel)
             drawInstances(*backroomsShader, *oldPaperBoxesModel, boxesInstances, true, STREAM_DRAW_RADIUS);
-        if (demonReady && monsterAlienModel)
+        if (monsterAlienModel)
             drawInstances(*backroomsShader, *monsterAlienModel, demonInstances, false, STREAM_DRAW_RADIUS);
-        if (computersReady && sciFiComputerModel)
+        if (sciFiComputerModel)
             drawInstances(*backroomsShader, *sciFiComputerModel, computerInstances, false, STREAM_DRAW_RADIUS);
-        if (boothsReady && publicPhoneBoothModel)
+        if (publicPhoneBoothModel)
             drawInstances(*backroomsShader, *publicPhoneBoothModel, boothInstances, false, STREAM_DRAW_RADIUS);
 
         // ============================================================================
@@ -1688,15 +1688,15 @@ int main() {
 
         cubeShader->setVec4("cubeColor", glm::vec4(0.0f, 0.0f, 0.0f, 0.50f));
 
-        if (officeReady && officeFurnitureModel)
+        if (officeFurnitureModel)
             drawPlanarShadows(*cubeShader, *officeFurnitureModel, officeInstances, floorY, lightDirection, false, STREAM_SHADOW_RADIUS);
-        if (boxesReady && oldPaperBoxesModel)
+        if (oldPaperBoxesModel)
             drawPlanarShadows(*cubeShader, *oldPaperBoxesModel, boxesInstances, floorY, lightDirection, true, STREAM_SHADOW_RADIUS);
-        if (demonReady && monsterAlienModel)
+        if (monsterAlienModel)
             drawPlanarShadows(*cubeShader, *monsterAlienModel, demonInstances, floorY, lightDirection, false, STREAM_SHADOW_RADIUS);
-        if (computersReady && sciFiComputerModel)
+        if (sciFiComputerModel)
             drawPlanarShadows(*cubeShader, *sciFiComputerModel, computerInstances, floorY, lightDirection, false, STREAM_SHADOW_RADIUS);
-        if (boothsReady && publicPhoneBoothModel)
+        if (publicPhoneBoothModel)
             drawPlanarShadows(*cubeShader, *publicPhoneBoothModel, boothInstances, floorY, lightDirection, false, STREAM_SHADOW_RADIUS);
 
         glDepthMask(GL_TRUE);
