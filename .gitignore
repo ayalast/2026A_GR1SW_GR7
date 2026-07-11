@@ -6,3 +6,13 @@ Release/
 *.pdb
 *.idb
 *.ilk
+
+# local diagnostics / temp
+audio_test_*.txt
+spawn_diag*.txt
+*.user
+
+
+# pruebas locales de texturas
+2026A_GR1SW_GR7/tools/tex_light_lab/
+
