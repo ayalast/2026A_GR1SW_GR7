@@ -100,11 +100,12 @@ static int   g_phoneRingsLeft = 0;
 static const float g_phoneVolume = 0.0045f;
 static const float g_phoneRingGap = 2.8f;
 
-// Voces lejanas
+// Voces lejanas (Huama). RMS de archivo ~3-5x el del buzz; vol local ~0.22
+// suena al nivel del zumbido (0.30) o ligeramente por encima en juego.
 static char  g_voicePaths[3][512] = {};
 static int   g_voiceCount = 0;
-static float g_voiceSilenceLeft = 35.0f;
-static const float g_voiceVolume = 0.045f;
+static float g_voiceSilenceLeft = 12.0f;
+static const float g_voiceVolume = 0.22f;
 
 static float randRange(float lo, float hi)
 {
@@ -492,8 +493,8 @@ void AudioBgm_DistantVoicesSet(const char* path0, const char* path1, const char*
 #endif
         g_voiceCount++;
     }
-    // Primera voz no tarda tanto (para notar que existen)
-    g_voiceSilenceLeft = randRange(8.0f, 18.0f);
+    // Primera voz pronto (y mas en blackout)
+    g_voiceSilenceLeft = g_blackoutMute ? randRange(2.0f, 6.0f) : randRange(4.0f, 10.0f);
     std::cout << "[Audio] Voces lejanas: " << g_voiceCount
               << " pistas, vol=" << g_voiceVolume
               << " (primera en ~" << g_voiceSilenceLeft << "s)\n";
@@ -503,7 +504,7 @@ void AudioBgm_DistantVoicesSet(const char* path0, const char* path1, const char*
 
 void AudioBgm_DistantVoicesReset()
 {
-    g_voiceSilenceLeft = randRange(10.0f, 22.0f);
+    g_voiceSilenceLeft = g_blackoutMute ? randRange(2.0f, 7.0f) : randRange(5.0f, 12.0f);
 }
 
 static void updatePhoneRing(float deltaTime)
@@ -551,13 +552,19 @@ static void updateDistantVoices(float deltaTime)
         return;
 
     const int idx = std::rand() % g_voiceCount;
-    // Pitch un poco mas grave / variable (mas inquietante)
-    // AudioBgm_PlaySfx no expone pitch para voces; volumen muy bajo basta + FX en archivo
-    if (!AudioBgm_PlaySfx(g_voicePaths[idx], g_voiceVolume))
+    // En blackout (sin luces) un poco mas fuertes y mucho mas frecuentes
+    const float vol = g_blackoutMute ? (g_voiceVolume * 1.15f) : g_voiceVolume;
+    if (!AudioBgm_PlaySfx(g_voicePaths[idx], vol))
         std::cout << "[Audio] FALLO voz lejana: " << g_voicePaths[idx] << "\n";
     else
-        std::cout << "[Audio] Voz lejana #" << (idx + 1) << " OK\n";
-    g_voiceSilenceLeft = randRange(28.0f, 85.0f);
+        std::cout << "[Audio] Voz lejana #" << (idx + 1)
+                  << (g_blackoutMute ? " (blackout)" : "") << " OK\n";
+
+    // Antes: 28-85s (casi inaudibles en sesion). Ahora: frecuentes; blackout casi continuo.
+    if (g_blackoutMute)
+        g_voiceSilenceLeft = randRange(3.0f, 9.0f);
+    else
+        g_voiceSilenceLeft = randRange(6.0f, 16.0f);
 }
 
 static void applyAdmiracionVolume()

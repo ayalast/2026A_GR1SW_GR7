@@ -628,13 +628,33 @@ void drawCameraInstances(
 // FUNCIONES DE COLISIONES
 // ============================================================================
 
-void addInstancesCollision(CollisionManager& manager, const Model& model, const std::vector<Instance>& instances, bool firstMeshOnly = false)
+// firstMeshOnly: solo primera malla (cajas).
+// xzPad: infla XZ (props huecos / estrechos).
+// minTopY: techo minimo del AABB en mundo. El jugador tiene ojo en Y=0 y radio 1;
+// si el mesh queda por debajo del ojo, la normal de colision es vertical y se
+// puede atravesar — forzar max.y >= minTopY bloquea en horizontal.
+void addInstancesCollision(
+    CollisionManager& manager,
+    const Model& model,
+    const std::vector<Instance>& instances,
+    bool firstMeshOnly = false,
+    float xzPad = 0.0f,
+    float minTopY = -1.0e9f)
 {
     const AABB localBounds = computeModelBounds(model, firstMeshOnly);
 
     for (const Instance& instance : instances)
     {
-        const AABB worldBounds = transformBounds(localBounds, buildInstanceMatrix(instance));
+        AABB worldBounds = transformBounds(localBounds, buildInstanceMatrix(instance));
+        if (xzPad > 0.0f)
+        {
+            worldBounds.min.x -= xzPad;
+            worldBounds.max.x += xzPad;
+            worldBounds.min.z -= xzPad;
+            worldBounds.max.z += xzPad;
+        }
+        if (worldBounds.max.y < minTopY)
+            worldBounds.max.y = minTopY;
         manager.addStaticBox(worldBounds);
     }
 }
@@ -1316,8 +1336,11 @@ int main() {
     sciFiComputerModel = std::make_unique<Model>("models/sci-fi_computer/computadora.obj");
     {
         const AABB computerBounds = computeModelBounds(*sciFiComputerModel);
-        computerInstances = createFloorInstances(computerAnchors, roomWorldBounds, computerBounds, floorY, 1.0f, computerYaws, 0.35f);
-        addInstancesCollision(colManager, *sciFiComputerModel, computerInstances);
+        computerInstances = createFloorInstances(
+            computerAnchors, roomWorldBounds, computerBounds, floorY, 1.0f, computerYaws, 0.35f);
+        // Mesh tope ~ floorY+2.9 = -0.1 < ojo Y=0: sin minTopY se atraviesa (normal vertical).
+        addInstancesCollision(colManager, *sciFiComputerModel, computerInstances, false, 0.30f, 1.25f);
+        std::cout << "[Load] PCs: " << computerInstances.size() << " (colision solida)\n";
     }
     progressBase += W_COMP;
     if (!drawSplashFrame("Backrooms - Computadoras listas", progressBase)) { AudioBgm_Shutdown(); glfwTerminate(); return 0; }
@@ -1327,7 +1350,8 @@ int main() {
     {
         const AABB boothBounds = computeModelBounds(*publicPhoneBoothModel);
         boothInstances = generatePhoneBooths(roomWorldBounds, boothBounds, floorY, 50);
-        addInstancesCollision(colManager, *publicPhoneBoothModel, boothInstances);
+        // Cabinas estrechas (~0.7m) y tope bajo el ojo: pad XZ + techo de colision alto
+        addInstancesCollision(colManager, *publicPhoneBoothModel, boothInstances, false, 0.40f, 1.25f);
     }
     progressBase += W_BOOTHS;
     if (!drawSplashFrame("Backrooms - Cabinas listas", progressBase)) { AudioBgm_Shutdown(); glfwTerminate(); return 0; }
