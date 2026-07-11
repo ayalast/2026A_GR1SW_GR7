@@ -31,19 +31,6 @@
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb_image.h>
 
-// ---------------------------------------------------------------------------
-// Orden del archivo:
-//   1) globals, camara, estados
-//   2) structs (Instance, anchors, etc.)
-//   3) utilidades / bounds / spawn / camaras / payphones
-//   4) dibujo y sombras
-//   5) colisiones
-//   6) modos de luz (normal / blackout / admiracion)  [grilla: game_lights]
-//   7) main: carga, splash, loop
-//   8) callbacks (input, mouse, resize)
-// UI/menus: game_ui   |   audio: audio_bgm   |   luces techo: game_lights
-// ---------------------------------------------------------------------------
-
 // Volumen bajo de la musica de fondo
 static const float BGM_DISTANT_VOLUME = 0.045f;
 
@@ -133,9 +120,7 @@ static bool nearAnyXZ(const glm::vec3& cam, const std::vector<glm::vec3>& anchor
     return false;
 }
 
-// ============================================================================
-// ESTRUCTURAS Y TIPOS COMUNES
-// ============================================================================
+// structs base (instancias, anchors y demas)
 
 // Estructura base para instancias
 struct Instance
@@ -184,9 +169,7 @@ struct CameraPlacementConfig
     float yawJitterMax = 10.0f;
 };
 
-// ============================================================================
-// FUNCIONES DE UTILIDAD
-// ============================================================================
+// utilidades varias
 
 float randomRange(std::mt19937& rng, float minValue, float maxValue)
 {
@@ -208,9 +191,7 @@ float computeFootprintRadiusXZ(const AABB& localBounds, float scale)
     return std::max(maxX, maxZ) * scale;
 }
 
-// ============================================================================
-// FUNCIONES DE CÁLCULO DE BOUNDS
-// ============================================================================
+// calculo de bounds
 
 AABB computeMeshBounds(const Mesh& mesh)
 {
@@ -247,9 +228,7 @@ AABB computeModelBounds(const Model& model, bool firstMeshOnly = false)
     return bounds;
 }
 
-// ============================================================================
-// FUNCIONES DE TRANSFORMACIÓN
-// ============================================================================
+// matrices y transformaciones
 
 glm::mat4 buildInstanceMatrix(const Instance& instance)
 {
@@ -297,9 +276,7 @@ AABB buildScaledBounds(const AABB& localBounds, const glm::vec3& worldPosition, 
     return worldBounds;
 }
 
-// ============================================================================
-// FUNCIONES DE COLOCACIÓN Y GENERACIÓN
-// ============================================================================
+// aqui se colocan y generan las instancias
 
 glm::vec3 keepInstanceInsideRoomXZ(
     const glm::vec3& desiredPosition,
@@ -352,9 +329,7 @@ std::vector<WallAnchor> collectWallAnchors(const Model& collisionsModel, const g
     return wallAnchors;
 }
 
-// ============================================================================
-// GENERACIÓN DE CÁMARAS
-// ============================================================================
+// camaras de seguridad
 
 std::vector<CameraInstance> generateCameraInstances(
     const std::vector<WallAnchor>& wallAnchors,
@@ -437,9 +412,7 @@ std::vector<CameraInstance> generateCameraInstances(
     return instances;
 }
 
-// ============================================================================
-// GENERACIÓN DE INSTANCIAS EN EL PISO
-// ============================================================================
+// instancias sobre el piso
 
 std::vector<Instance> createFloorInstances(
     const std::vector<glm::vec3>& anchorsXZ,
@@ -478,9 +451,7 @@ std::vector<Instance> createFloorInstances(
     return out;
 }
 
-// ============================================================================
-// GENERACIÓN DE CABINAS TELEFÓNICAS
-// ============================================================================
+// cabinas telefonicas
 
 std::vector<Instance> generatePhoneBooths(const AABB& roomBounds, const AABB& boothBounds, float floorY, int targetCount)
 {
@@ -534,9 +505,7 @@ std::vector<Instance> generatePhoneBooths(const AABB& roomBounds, const AABB& bo
     return out;
 }
 
-// ============================================================================
-// FUNCIONES DE DIBUJADO
-// ============================================================================
+// dibujado
 
 void drawPlanarShadows(Shader& shadowShader, Model& model, const std::vector<Instance>& instances, float floorY, glm::vec3 lightDir, bool firstMeshOnly = false, float maxDist = 1e9f)
 {
@@ -624,15 +593,10 @@ void drawCameraInstances(
     }
 }
 
-// ============================================================================
-// FUNCIONES DE COLISIONES
-// ============================================================================
+// colisiones
 
-// firstMeshOnly: solo primera malla (cajas).
-// xzPad: infla XZ (props huecos / estrechos).
-// minTopY: techo minimo del AABB en mundo. El jugador tiene ojo en Y=0 y radio 1;
-// si el mesh queda por debajo del ojo, la normal de colision es vertical y se
-// puede atravesar — forzar max.y >= minTopY bloquea en horizontal.
+// params: usar solo la primera malla, cuanto inflar en XZ y el techo minimo del AABB.
+// el minTopY es clave: si el objeto queda bajo el ojo (Y=0) la colision no frena y se atraviesa.
 void addInstancesCollision(
     CollisionManager& manager,
     const Model& model,
@@ -721,9 +685,7 @@ static void toggleAdmiracionMode()
 
 // Luces de techo: ver game_lights.cpp (findCeilingLights / applyCeilingLightMode)
 
-// ============================================================================
-// OBTENER CENTRO LOCAL DE LAMPARA
-// ============================================================================
+// devuelve el centro local de la lampara
 glm::vec3 findLocalLampCenter(const Model& model)
 {
     glm::vec3 sum(0.0f);
@@ -754,9 +716,7 @@ glm::vec3 findLocalLampCenter(const Model& model)
     return glm::vec3(0.0f);
 }
 
-// ============================================================================
-// MAIN
-// ============================================================================
+// main: carga, splash y loop
 
 int main() {
     // 1. Inicializar GLFW
@@ -1252,9 +1212,8 @@ int main() {
     std::vector<Instance> boothInstances;
     std::vector<glm::vec3> deskLampPositions;
 
-    // === PRECARGA DE PROPS EN SPLASH (feature/carga: todo listo antes de jugar) ===
-    // El stream al caminar causaba freezes al cargar Assimp en el hilo principal.
-    // LIGHTING_FAST_LOAD: omite TODOS los props para iterar iluminacion con arranque rapido.
+    // precargamos los props en el splash porque cargarlos al caminar congelaba el juego;
+    // con LIGHTING_FAST_LOAD se omiten todos para arrancar rapido al probar iluminacion
     if (LIGHTING_FAST_LOAD)
     {
         progressBase += W_CAMS + W_OFFICE + W_BOXES + W_DEMON + W_COMP + W_BOOTHS;
@@ -1317,7 +1276,7 @@ int main() {
         const AABB demonBounds = computeModelBounds(*monsterAlienModel);
         demonInstances = createFloorInstances(demonAnchors, roomWorldBounds, demonBounds, floorY, 1.8f, demonYaws, 0.45f);
         addInstancesCollision(colManager, *monsterAlienModel, demonInstances);
-        // Aviso de proximidad (loop; volumen por distancia — el mp3 es muy fuerte)
+        // Aviso de proximidad (loop; volumen por distancia, el mp3 es muy fuerte)
         if (!AudioBgm_ProximityLoad("sounds/entity_proximity.mp3"))
             std::cout << "[Audio] Aviso: no se cargo entity_proximity.mp3\n";
     }
@@ -1359,9 +1318,8 @@ int main() {
     std::cout << "[Load] Todos los props precargados (sin stream al caminar).\n";
     } // end !LIGHTING_FAST_LOAD
 
-    // --- Spawn ---
-    // GitHub a7354ab: Camera(0, 0, 3), Yaw=-90, Pitch=0  -> altura Y=0 (CORRECTA a escala del mapa).
-    // Eso a menudo mira de frente a una pared. Mantenemos Y=0 y buscamos XZ+yaw con vista abierta a pasillos.
+    // spawn: mantenemos la altura Y=0 (la correcta a escala del mapa) pero elegimos XZ y
+    // yaw para no aparecer mirando de frente a una pared
     if (!drawSplashFrame("Backrooms - Preparando spawn...", progressBase + W_SPAWN * 0.4f)) { AudioBgm_Shutdown(); glfwTerminate(); return 0; }
     if (LIGHTING_FAST_LOAD)
     {
@@ -1568,14 +1526,13 @@ int main() {
         lastFrame = currentFrame;
         if (deltaTime > 0.1f) deltaTime = 0.1f;
 
-        // BGM: en juego hace rachas/silencios; en menu no hace nada (loop fijo)
-        // Telefono lejano solo en juego activo (Playing/FadeIn), no en menu/pausa
-        // Alarma admiracion se actualiza siempre (tambien en pausa si el modo esta ON)
+        // el audio de juego (rachas, telefono lejano) solo corre jugando; la alarma de
+        // admiracion se actualiza siempre, incluso en pausa si el modo esta activo
         AudioBgm_Update(deltaTime, appState == AppState::Playing || appState == AppState::FadeIn);
 
         processInput(window);
 
-        // ---------- MENU / PAUSA: solo UI 2D (sin mundo 3D) ----------
+        // menu / pausa: aca solo va la UI 2D, sin mundo 3D
         if (appState == AppState::Menu || appState == AppState::Paused)
         {
             // En pausa con Admiracion: monstruo "cerca" a nivel tenso bajo (no silencio total)
@@ -1716,7 +1673,7 @@ int main() {
             continue;
         }
 
-        // ---------- FADE-IN / PLAYING: mundo 3D ----------
+        // fade-in / playing: ya se dibuja el mundo 3D
         if (appState == AppState::FadeIn)
         {
             fadeBlack -= deltaTime / FADE_IN_SECONDS;
@@ -2015,11 +1972,8 @@ int main() {
         if (publicPhoneBoothModel)
             drawInstances(*backroomsShader, *publicPhoneBoothModel, boothInstances, false, STREAM_DRAW_RADIUS);
 
-        // ============================================================================
-        // === SOMBRAS PLANAS ===
-        // Siempre se dibujan. Con F ON, basico.fs baja alpha solo DENTRO del cono
-        // de la linterna (mismo spot que backrooms.fs); fuera del circulo la sombra queda.
-        // ============================================================================
+        // las sombras planas siempre se dibujan; con la linterna encendida solo se atenuan
+        // dentro de su cono, fuera del circulo la sombra se queda igual
         {
             glm::vec3 lightDirection(-0.2f, -1.0f, -0.3f);
 
@@ -2073,9 +2027,7 @@ int main() {
     return 0;
 }
 
-// ============================================================================
-// CALLBACKS
-// ============================================================================
+// callbacks (input, mouse, resize)
 
 static void startGameFromMenu(GLFWwindow* window)
 {
@@ -2102,9 +2054,7 @@ static void resumeFromPause(GLFWwindow* window)
     std::cout << "[UI] CONTINUAR\n";
 }
 
-// ============================================================================
-// PROCESAR ENTRADA
-// ============================================================================
+// procesa la entrada del teclado
 void processInput(GLFWwindow* window)
 {
     static bool escWasDown = false;
@@ -2113,7 +2063,7 @@ void processInput(GLFWwindow* window)
     const bool enterDown = glfwGetKey(window, GLFW_KEY_ENTER) == GLFW_PRESS
         || glfwGetKey(window, GLFW_KEY_KP_ENTER) == GLFW_PRESS;
 
-    // ----- MENU -----
+    // menu
     if (appState == AppState::Menu)
     {
         if (enterDown && !enterWasDown)
@@ -2125,7 +2075,7 @@ void processInput(GLFWwindow* window)
         return;
     }
 
-    // ----- PAUSA -----
+    // pausa
     if (appState == AppState::Paused)
     {
         static bool rWasDown = false;
@@ -2152,7 +2102,7 @@ void processInput(GLFWwindow* window)
         return;
     }
 
-    // ----- FADE-IN + PLAYING: se puede caminar en cuanto empieza el fundido -----
+    // fade-in + playing: se puede caminar en cuanto empieza el fundido
     // (el fade es visual; el jugador no se queda "congelado" esperando)
     if (appState == AppState::FadeIn || appState == AppState::Playing)
     {

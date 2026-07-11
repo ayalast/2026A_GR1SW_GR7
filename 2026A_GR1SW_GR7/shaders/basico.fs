@@ -10,7 +10,7 @@ uniform vec4 cubeColor;
 uniform bool flashlightOn;
 uniform vec3 flashPos;
 uniform vec3 flashDir;
-uniform float flashCutOff;      // cos(inner) — igual que spot del juego
+uniform float flashCutOff;      // cos(inner), igual que spot del juego
 uniform float flashOuterCutOff; // cos(outer)
 uniform float flashRange;
 
@@ -41,7 +41,7 @@ void main()
 
             alpha *= (1.0 - lit);
         }
-        // Fuera de flashRange: alpha sin tocar → sombra visible
+        // Fuera de flashRange: alpha sin tocar, sombra visible
     }
 
     if (alpha < 0.02)

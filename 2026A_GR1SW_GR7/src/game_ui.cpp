@@ -64,7 +64,7 @@ PauseSliderLayout getPauseSliderLayout()
     return L;
 }
 
-// ---- Reinicio del proceso (Windows) ----
+// reinicio del proceso (solo Windows)
 
 #ifdef _WIN32
 static bool fileExistsA(const char* path)

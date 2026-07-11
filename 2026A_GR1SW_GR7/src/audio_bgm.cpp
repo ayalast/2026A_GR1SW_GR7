@@ -925,9 +925,7 @@ bool AudioBgm_PlaySfx(const char* path, float volume)
     ma_sound_set_looping(&g_sfx[slot], MA_FALSE);
     ma_sound_set_volume(&g_sfx[slot], volume);
 
-    // Ligera variacion de pitch en pasos (mismo archivo, menos robotico)
-    // miniaudio: ma_sound_set_pitch
-    // Solo si el path parece footstep - caller can pass volume; optional pitch via path check
+    // a los pasos les meto un pitch aleatorio para que no suenen tan roboticos
     if (std::strstr(path, "footstep") != nullptr)
     {
         const float pitch = 0.92f + randRange(0.0f, 0.16f); // 0.92 .. 1.08
