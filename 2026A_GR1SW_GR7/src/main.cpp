@@ -1283,9 +1283,9 @@ int main() {
     // Telefono + voces: siempre (aunque falle carga de entidad)
     AudioBgm_PhoneRingSetPath("sounds/phone_ring.mp3");
     AudioBgm_DistantVoicesSet(
-        "sounds/voice_distant_1.ogg",
-        "sounds/voice_distant_2.ogg",
-        "sounds/voice_distant_3.ogg");
+        "sounds/voice_distant_1.mp3",
+        "sounds/voice_distant_2.mp3",
+        "sounds/voice_distant_3.mp3");
     AudioBgm_AdmiracionAlarmSetPath("sounds/admiracion_alarm.wav");
     AudioBgm_AmbientBuzzSetPath("sounds/buzz_harmonic.mp3");
     progressBase += W_DEMON;
