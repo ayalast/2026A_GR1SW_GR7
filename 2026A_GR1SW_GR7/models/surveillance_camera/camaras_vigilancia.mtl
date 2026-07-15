@@ -1,22 +1,9 @@
 # Blender 5.1.2 MTL File: 'None'
 # www.blender.org
 
-newmtl Bolts
-Ns 250.000000
-Ka 1.000000 1.000000 1.000000
-Ks 0.500000 0.500000 0.500000
-Ni 1.500000
-d 1.000000
-illum 2
-map_Kd Bolts_baseColor.png
-map_Ks Bolts_metallicRoughness.png
-map_Ke Bolts_emissive.png
-map_Bump -bm 1.000000 Bolts_normal.png
-
 newmtl Cam_Attachments
 Ns 250.000000
 Ka 1.000000 1.000000 1.000000
-Ks 0.500000 0.500000 0.500000
 Ni 1.500000
 d 1.000000
 illum 2
@@ -28,7 +15,6 @@ map_Bump -bm 1.000000 Cam_Attachments_normal.png
 newmtl Cam_Body
 Ns 250.000000
 Ka 1.000000 1.000000 1.000000
-Ks 0.500000 0.500000 0.500000
 Ni 1.500000
 d 1.000000
 illum 2
@@ -40,7 +26,6 @@ map_Bump -bm 1.000000 Cam_Body_normal.png
 newmtl Cam_Cover
 Ns 250.000000
 Ka 1.000000 1.000000 1.000000
-Ks 0.500000 0.500000 0.500000
 Ni 1.500000
 d 1.000000
 illum 2
@@ -52,7 +37,6 @@ map_Bump -bm 1.000000 Cam_Cover_normal.png
 newmtl Cam_FrontBack
 Ns 250.000000
 Ka 1.000000 1.000000 1.000000
-Ks 0.500000 0.500000 0.500000
 Ni 1.500000
 d 1.000000
 illum 2
@@ -61,22 +45,9 @@ map_Ks Cam_FrontBack_metallicRoughness.png
 map_Ke Cam_FrontBack_emissive.png
 map_Bump -bm 1.000000 Cam_FrontBack_normal.png
 
-newmtl Cord
-Ns 250.000000
-Ka 1.000000 1.000000 1.000000
-Ks 0.500000 0.500000 0.500000
-Ni 1.500000
-d 1.000000
-illum 2
-map_Kd Cord_baseColor.png
-map_Ks Cord_metallicRoughness.png
-map_Ke Cord_emissive.png
-map_Bump -bm 1.000000 Cord_normal.png
-
 newmtl Glass
 Ns 250.000000
 Ka 1.000000 1.000000 1.000000
-Ks 0.500000 0.500000 0.500000
 Ni 1.500000
 d 1.000000
 illum 2
@@ -87,7 +58,6 @@ map_Ke Glass_emissive.png
 newmtl Wall
 Ns 250.000000
 Ka 1.000000 1.000000 1.000000
-Ks 0.500000 0.500000 0.500000
 Ni 1.500000
 d 1.000000
 illum 2
@@ -99,7 +69,6 @@ map_Bump -bm 1.000000 Wall_normal.png
 newmtl WallAttach
 Ns 250.000000
 Ka 1.000000 1.000000 1.000000
-Ks 0.500000 0.500000 0.500000
 Ni 1.500000
 d 1.000000
 illum 2
@@ -107,15 +76,3 @@ map_Kd WallAttach_baseColor.png
 map_Ks WallAttach_metallicRoughness.png
 map_Ke WallAttach_emissive.png
 map_Bump -bm 1.000000 WallAttach_normal.png
-
-newmtl material
-Ns 250.000000
-Ka 1.000000 1.000000 1.000000
-Ks 0.500000 0.500000 0.500000
-Ni 1.500000
-d 1.000000
-illum 2
-map_Kd material_baseColor.png
-map_Ks material_metallicRoughness.png
-map_Ke material_emissive.png
-map_Bump -bm 1.000000 material_normal.png
