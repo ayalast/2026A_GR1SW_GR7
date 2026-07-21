@@ -31,7 +31,7 @@ void AudioBgm_SetBlackoutMute(bool mute);
 // Llamar cada frame
 void AudioBgm_Update(float deltaTime, bool gameActive = false);
 
-// SFX one-shot
+// SFX one shot
 bool AudioBgm_PlaySfx(const char* path, float volume = 0.85f);
 
 // Telefono lejano
@@ -55,3 +55,13 @@ bool AudioBgm_AdmiracionAlarmIsPlaying();
 // Zumbido de fondo en modo normal
 void AudioBgm_AmbientBuzzSetPath(const char* path);
 void AudioBgm_AmbientBuzzSetActive(bool active);
+
+// Ticks del temporizador supervivencia (Chase / Rage)
+// mode: 0 off, 1 chase, 2 rage (pitch grave en rage)
+void AudioBgm_TimerTickSetPaths(const char* pathChase, const char* pathRage);
+void AudioBgm_TimerTickSetMode(int mode);
+void AudioBgm_TimerTickStop();
+
+// Maquina de escribir de finales (canal dedicado, no se pisa con el pool SFX)
+bool AudioBgm_TypewriterStart(const char* path, float volume = 0.75f);
+void AudioBgm_TypewriterStop();

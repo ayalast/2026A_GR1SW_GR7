@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="es"><head><meta charset="utf-8"/><title>B3 — Entidad cerca</title>
+<style>
+html,body{margin:0;height:100%;overflow:hidden;background:#020000}
+.red{
+  position:fixed;inset:0;
+  background:radial-gradient(circle at 50% 40%, #400008 0%, #0a0000 45%, #000 100%);
+}
+.eyes{
+  position:fixed;left:50%;top:28%;transform:translateX(-50%);
+  width:min(70vw,520px);height:40px;display:flex;justify-content:space-between;opacity:.25;
+}
+.eye{
+  width:70px;height:28px;border-radius:50%;
+  background:radial-gradient(circle at 50% 50%, #ff2200 0%, #400 60%, transparent 70%);
+  box-shadow:0 0 30px #f20;animation: eye 1.4s ease-in-out infinite alternate;
+}
+.eye:nth-child(2){animation-delay:.2s}
+@keyframes eye{from{opacity:.2;transform:scaleY(.7)}to{opacity:.7;transform:scaleY(1)}}
+.wrap{
+  position:relative;z-index:3;height:100%;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;font-family:Georgia,"Times New Roman",serif;
+}
+.stack{position:relative;display:inline-block}
+.stack span{
+  display:block;font-size:clamp(5.8rem,17vw,12rem);font-weight:700;
+  line-height:0.92;letter-spacing:.03em;color:#fff0ea;
+}
+.stack .g1,.stack .g2{
+  position:absolute;left:0;top:0;width:100%;text-align:center;
+  mix-blend-mode:screen;pointer-events:none;
+}
+.stack .g1{color:#ff1040;animation: g1 0.11s steps(2) infinite;opacity:.9}
+.stack .g2{color:#20f0ff;animation: g2 0.13s steps(2) infinite;opacity:.75}
+@keyframes g1{
+  0%{transform:translate(0,0) skewX(0)}
+  50%{transform:translate(-8px,2px) skewX(-2deg)}
+  100%{transform:translate(5px,-3px) skewX(1deg)}
+}
+@keyframes g2{
+  0%{transform:translate(0,0)}
+  50%{transform:translate(7px,-2px)}
+  100%{transform:translate(-6px,3px)}
+}
+.main{
+  text-shadow:0 0 20px rgba(255,40,20,.8),0 0 60px rgba(200,0,0,.5),0 8px 0 #1a0000;
+  animation: hard 0.09s linear infinite;
+}
+@keyframes hard{
+  0%,100%{transform:translate(0,0)}
+  33%{transform:translate(-2px,1px)}
+  66%{transform:translate(2px,-1px)}
+}
+.whisper{
+  margin-top:1.5rem;color:rgba(255,120,100,.5);letter-spacing:.5em;
+  font-size:clamp(0.9rem,2vw,1.25rem);text-transform:uppercase;
+  animation: w 0.6s step-end infinite;
+}
+@keyframes w{50%{opacity:0}}
+.tear{
+  position:fixed;left:0;right:0;height:18%;top:38%;
+  background:linear-gradient(90deg, transparent, rgba(255,0,40,.15), transparent);
+  mix-blend-mode:screen;animation: tear 0.15s steps(3) infinite;
+}
+@keyframes tear{to{transform:translateY(12px);opacity:.3}}
+.scan{
+  position:fixed;inset:0;pointer-events:none;opacity:.4;
+  background:repeating-linear-gradient(0deg,transparent 0 3px,rgba(0,0,0,.4) 3px 4px);
+}
+</style></head>
+<body>
+<div class="red"></div>
+<div class="eyes"><div class="eye"></div><div class="eye"></div></div>
+<div class="tear"></div><div class="scan"></div>
+<div class="wrap">
+  <div class="stack">
+    <span class="g1">¡Huye!</span>
+    <span class="g2">¡Huye!</span>
+    <span class="main">¡Huye!</span>
+  </div>
+  <div class="whisper">está detrás de ti</div>
+</div>
+</body></html>

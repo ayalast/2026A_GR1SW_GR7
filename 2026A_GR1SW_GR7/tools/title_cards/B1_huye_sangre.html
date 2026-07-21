@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="es"><head><meta charset="utf-8"/><title>B1 — Alarma visceral</title>
+<style>
+html,body{margin:0;height:100%;overflow:hidden;background:#050000}
+.bg{
+  position:fixed;inset:0;
+  background:
+    radial-gradient(ellipse 90% 70% at 50% 45%, rgba(90,0,0,.55) 0%, transparent 55%),
+    radial-gradient(ellipse 120% 100% at 50% 100%, #1a0000 0%, #000 70%),
+    #050000;
+  animation: pulse 0.55s ease-in-out infinite alternate;
+}
+@keyframes pulse{
+  from{filter:brightness(1)}
+  to{filter:brightness(1.25)}
+}
+.vignette{
+  position:fixed;inset:0;pointer-events:none;
+  background:radial-gradient(ellipse at center, transparent 35%, rgba(0,0,0,.85) 100%);
+}
+.scan{
+  position:fixed;inset:0;pointer-events:none;opacity:.35;
+  background:repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,.35) 3px);
+  animation: scroll 0.12s linear infinite;
+}
+@keyframes scroll{to{transform:translateY(3px)}}
+.noise{
+  position:fixed;inset:0;opacity:.12;pointer-events:none;mix-blend-mode:overlay;
+  background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.95' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  animation: n 0.08s steps(2) infinite;
+}
+@keyframes n{to{transform:translate(1%,-1%)}}
+.wrap{
+  position:relative;z-index:2;height:100%;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;text-align:center;
+  font-family:"Times New Roman",Times,Georgia,serif;
+}
+.warn{
+  color:#ff6a4a;font-size:clamp(0.95rem,2.2vw,1.35rem);letter-spacing:.55em;
+  text-transform:uppercase;margin-bottom:1.2rem;opacity:.9;
+  animation: blink 0.4s step-end infinite;
+}
+@keyframes blink{50%{opacity:.15}}
+h1{
+  margin:0;line-height:0.95;
+  font-size:clamp(5.5rem,18vw,12.5rem);font-weight:700;
+  color:#ffe8dc;
+  letter-spacing:.04em;
+  text-shadow:
+    0 0 4px #ff2000,
+    0 0 30px rgba(255,20,0,.75),
+    0 0 80px rgba(180,0,0,.55),
+    0 6px 0 #2a0000,
+    4px 0 0 rgba(255,0,40,.35),
+    -4px 0 0 rgba(0,180,255,.2);
+  animation: shake 0.07s linear infinite, throb 0.7s ease-in-out infinite alternate;
+}
+@keyframes shake{
+  0%{transform:translate(0,0) skewX(0)}
+  25%{transform:translate(-3px,1px) skewX(-0.4deg)}
+  50%{transform:translate(3px,-1px) skewX(0.3deg)}
+  75%{transform:translate(-2px,2px) skewX(0.2deg)}
+  100%{transform:translate(2px,0) skewX(-0.2deg)}
+}
+@keyframes throb{
+  from{letter-spacing:.04em;filter:contrast(1.1)}
+  to{letter-spacing:.07em;filter:contrast(1.25) saturate(1.2)}
+}
+.sub{
+  margin-top:1.6rem;color:rgba(255,160,140,.55);
+  font-size:clamp(1rem,2.4vw,1.4rem);letter-spacing:.4em;text-transform:uppercase;
+}
+.bar{
+  position:fixed;left:0;right:0;height:8px;background:linear-gradient(90deg,#400,#f30,#400);
+  box-shadow:0 0 20px #f20;animation: bar 0.9s linear infinite;
+}
+.bar.top{top:0}.bar.bot{bottom:0}
+@keyframes bar{from{opacity:.4}to{opacity:1}}
+</style></head>
+<body>
+<div class="bg"></div><div class="noise"></div><div class="scan"></div><div class="vignette"></div>
+<div class="bar top"></div><div class="bar bot"></div>
+<div class="wrap">
+  <div class="warn">peligro · inmediato</div>
+  <h1>¡Huye!</h1>
+  <div class="sub">no mires atrás</div>
+</div>
+</body></html>

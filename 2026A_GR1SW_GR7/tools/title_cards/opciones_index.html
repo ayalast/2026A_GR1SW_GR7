@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8"/>
+<title>Títulos de fase — elección</title>
+<style>
+  body { font-family: system-ui, sans-serif; background:#111; color:#eee; margin:24px; }
+  h1 { font-weight:600; font-size:1.25rem; }
+  p { color:#aaa; max-width:52rem; line-height:1.5; }
+  .ok { color:#9dcea0; }
+  .grid { display:grid; gap:16px; margin-top:20px; }
+  a.card {
+    display:block; padding:16px 18px; border:1px solid #333; border-radius:10px;
+    color:#f0e6c8; text-decoration:none; background:#1a1a1a;
+  }
+  a.card:hover { border-color:#c66; background:#221818; }
+  a.card strong { display:block; font-size:1.1rem; margin-bottom:6px; color:#fff; }
+  a.card span { color:#999; font-size:0.9rem; }
+  .tag { display:inline-block; margin-right:8px; padding:2px 8px; border-radius:999px; background:#333; font-size:0.75rem; }
+  .tag.locked { background:#2a4a2a; color:#bde5bd; }
+  .tag.hot { background:#4a2020; color:#ffb0a0; }
+  hr { border:none; border-top:1px solid #333; margin:28px 0; }
+</style>
+</head>
+<body>
+  <h1>Títulos de cambio de modo</h1>
+  <p class="ok"><b>En juego:</b> Luces Apagadas → <b>A2</b> (fijo). Rage → <b>B1 o B3 al azar</b>.</p>
+  <p>
+    Referencia visual de las tarjetas activas. Ábrelas en <b>F11</b> si quieres revisarlas.
+  </p>
+  <hr/>
+  <div class="grid">
+    <a class="card" href="A2_luces_neon_sucio.html"><span class="tag locked">Luces · elegido</span><strong>A2 — Neón sucio / VHS</strong><span>Referencia fija para Chase.</span></a>
+  </div>
+  <hr/>
+  <div class="grid">
+    <a class="card" href="B1_huye_sangre.html"><span class="tag hot">Huye</span><strong>B1 — Alarma visceral</strong><span>Barras de emergencia, shake, “peligro · inmediato”, glow rojo.</span></a>
+    <a class="card" href="B2_huye_escape.html"><span class="tag hot">Escapa</span><strong>B2 — ¡Escapa! pánico</strong><span>Flash de sirena, marco rojo, tipografía Impact, “AHORA / CORRE”.</span></a>
+    <a class="card" href="B3_huye_glitch.html"><span class="tag hot">Huye</span><strong>B3 — Entidad cerca</strong><span>Ojos en la penumbra, glitch RGB, “está detrás de ti”.</span></a>
+    <a class="card" href="B4_huye_minimo.html"><span class="tag hot">Huye</span><strong>B4 — Countdown de pánico</strong><span>Ondas, sirena, latido del texto, NO PARES / NO MIRES.</span></a>
+  </div>
+</body>
+</html>

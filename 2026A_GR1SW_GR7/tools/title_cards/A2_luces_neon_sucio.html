@@ -1,0 +1,10 @@
+<!DOCTYPE html>
+<html lang="es"><head><meta charset="utf-8"/><title>A2 Luces</title>
+<style>
+html,body{margin:0;height:100%;background:#050403;display:flex;align-items:center;justify-content:center;font-family:Georgia,"Times New Roman",serif;overflow:hidden}
+.wrap{position:relative;text-align:center;filter:contrast(1.15);padding:1.5rem}
+h1{color:#f0d890;font-size:clamp(4.2rem,13vw,9rem);letter-spacing:.14em;margin:0;line-height:1.05;text-shadow:0 0 12px #c9a227,0 0 55px rgba(255,200,50,.4),3px 0 #3a2a00,-3px 0 #1a1000}
+.scan{position:absolute;inset:-30%;background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,.12) 3px);pointer-events:none;mix-blend-mode:multiply}
+.noise{position:fixed;inset:0;opacity:.08;background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");pointer-events:none}
+</style></head>
+<body><div class="noise"></div><div class="wrap"><h1>Luces Apagadas</h1><div class="scan"></div></div></body></html>

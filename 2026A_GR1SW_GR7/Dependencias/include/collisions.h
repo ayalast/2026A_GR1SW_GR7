@@ -62,7 +62,7 @@ public:
     }
 
     //Comprobar colision esferica con caja de colision
-    bool sphereIntersects(AABB box, glm::vec3 position, float radius)
+    bool sphereIntersects(AABB box, glm::vec3 position, float radius) const
     {
         glm::vec3 closest = glm::clamp(position, box.min, box.max);
         glm::vec3 distance = position - closest;
@@ -144,6 +144,30 @@ public:
         }
 
         return corrected;
+    }
+
+    size_t staticBoxCount() const { return boxes.size(); }
+
+    // Borra [start, start+count). Usado para quitar AABBs de monstruos estaticos en survival.
+    void eraseStaticBoxes(size_t start, size_t count)
+    {
+        if (start >= boxes.size() || count == 0)
+            return;
+        size_t end = start + count;
+        if (end > boxes.size())
+            end = boxes.size();
+        boxes.erase(boxes.begin() + static_cast<std::ptrdiff_t>(start),
+                    boxes.begin() + static_cast<std::ptrdiff_t>(end));
+    }
+
+    bool sphereBlocked(const glm::vec3& position, float radius) const
+    {
+        for (const AABB& box : boxes)
+        {
+            if (sphereIntersects(box, position, radius))
+                return true;
+        }
+        return false;
     }
 
     void drawCollisionBoxes(Shader& shader)

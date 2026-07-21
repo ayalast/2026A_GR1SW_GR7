@@ -12,7 +12,7 @@ struct CeilingLight
     bool isOn = true;
 };
 
-// blackout=true -> onTotalBlack; si no, onClear
+// blackout true a onTotalBlack; si no, onClear
 void applyCeilingLightMode(std::vector<CeilingLight>& lights, bool blackout);
 
 // Genera la grilla de lamparas y decide zonas oscuras

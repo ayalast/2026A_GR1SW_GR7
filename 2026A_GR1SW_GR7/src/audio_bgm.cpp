@@ -13,7 +13,7 @@ static ma_sound  g_bgm;
 static bool      g_engineReady = false;
 static bool      g_soundReady  = false;
 
-// Pool de SFX one-shot
+// Pool de SFX one shot
 static const int SFX_POOL = 4;
 static ma_sound  g_sfx[SFX_POOL];
 static bool      g_sfxReady[SFX_POOL] = {};
@@ -40,6 +40,21 @@ static bool      g_buzzActive = false;
 static bool      g_buzzPlaying = false;
 static char      g_buzzPath[512] = {};
 static const float g_buzzBaseVol = 0.30f;
+
+// Timer tick loops (supervivencia)
+static ma_sound  g_tick;
+static bool      g_tickReady = false;
+static bool      g_tickPlaying = false;
+static int       g_tickMode = 0; // 0 off, 1 chase, 2 rage
+static char      g_tickPathChase[512] = {};
+static char      g_tickPathRage[512] = {};
+static const float g_tickChaseVol = 0.22f;
+static const float g_tickRageVol  = 0.28f;
+
+// Typewriter ending (one shot largo dedicado)
+static ma_sound  g_typewriter;
+static bool      g_typewriterReady = false;
+static bool      g_typewriterPlaying = false;
 
 static char  g_path[512] = {};
 static float g_menuVolume = 0.045f;
@@ -100,12 +115,12 @@ static int   g_phoneRingsLeft = 0;
 static const float g_phoneVolume = 0.0045f;
 static const float g_phoneRingGap = 2.8f;
 
-// Voces lejanas (Huama). RMS de archivo ~3-5x el del buzz; vol local ~0.22
+// Voces lejanas (Huama). RMS de archivo ~3 a 5x el del buzz; vol local ~0.22
 // suena al nivel del zumbido (0.30) o ligeramente por encima en juego.
 static char  g_voicePaths[3][512] = {};
 static int   g_voiceCount = 0;
-static float g_voiceSilenceLeft = 12.0f;
-static const float g_voiceVolume = 0.22f;
+static float g_voiceSilenceLeft = 100.0f;
+static const float g_voiceVolume = 0.16f;
 
 static float randRange(float lo, float hi)
 {
@@ -275,6 +290,21 @@ void AudioBgm_Shutdown()
         g_buzzReady = false;
         g_buzzPlaying = false;
         g_buzzActive = false;
+    }
+    if (g_tickReady)
+    {
+        ma_sound_stop(&g_tick);
+        ma_sound_uninit(&g_tick);
+        g_tickReady = false;
+        g_tickPlaying = false;
+        g_tickMode = 0;
+    }
+    if (g_typewriterReady)
+    {
+        ma_sound_stop(&g_typewriter);
+        ma_sound_uninit(&g_typewriter);
+        g_typewriterReady = false;
+        g_typewriterPlaying = false;
     }
     if (g_soundReady)
     {
@@ -494,7 +524,8 @@ void AudioBgm_DistantVoicesSet(const char* path0, const char* path1, const char*
         g_voiceCount++;
     }
     // Primera voz pronto (y mas en blackout)
-    g_voiceSilenceLeft = g_blackoutMute ? randRange(2.0f, 6.0f) : randRange(4.0f, 10.0f);
+    // Primera voz muy tarde (antes era 2 a 10s y sonaba casi continuo)
+    g_voiceSilenceLeft = g_blackoutMute ? randRange(50.0f, 120.0f) : randRange(80.0f, 180.0f);
     std::cout << "[Audio] Voces lejanas: " << g_voiceCount
               << " pistas, vol=" << g_voiceVolume
               << " (primera en ~" << g_voiceSilenceLeft << "s)\n";
@@ -504,7 +535,7 @@ void AudioBgm_DistantVoicesSet(const char* path0, const char* path1, const char*
 
 void AudioBgm_DistantVoicesReset()
 {
-    g_voiceSilenceLeft = g_blackoutMute ? randRange(2.0f, 7.0f) : randRange(5.0f, 12.0f);
+    g_voiceSilenceLeft = g_blackoutMute ? randRange(50.0f, 120.0f) : randRange(80.0f, 180.0f);
 }
 
 static void updatePhoneRing(float deltaTime)
@@ -535,7 +566,7 @@ static void updatePhoneRing(float deltaTime)
     g_phoneSilenceLeft -= deltaTime;
     if (g_phoneSilenceLeft <= 0.0f)
     {
-        // 4-6 rings (default 5) = llamada sin contestar
+        // 4 a 6 rings (default 5) es llamada sin contestar
         g_phoneRingsLeft = 4 + (std::rand() % 3); // 4, 5 o 6
         g_phoneRingGapLeft = 0.0f; // primer ring ya
         std::cout << "[Audio] Telefono lejano: " << g_phoneRingsLeft << " rings\n";
@@ -552,19 +583,19 @@ static void updateDistantVoices(float deltaTime)
         return;
 
     const int idx = std::rand() % g_voiceCount;
-    // En blackout (sin luces) un poco mas fuertes y mucho mas frecuentes
-    const float vol = g_blackoutMute ? (g_voiceVolume * 1.15f) : g_voiceVolume;
+    // En blackout un poco mas fuertes, pero igual de raras
+    const float vol = g_blackoutMute ? (g_voiceVolume * 1.1f) : g_voiceVolume;
     if (!AudioBgm_PlaySfx(g_voicePaths[idx], vol))
         std::cout << "[Audio] FALLO voz lejana: " << g_voicePaths[idx] << "\n";
     else
         std::cout << "[Audio] Voz lejana #" << (idx + 1)
                   << (g_blackoutMute ? " (blackout)" : "") << " OK\n";
 
-    // Antes: 28-85s (casi inaudibles en sesion). Ahora: frecuentes; blackout casi continuo.
+    // Intervalo largo entre voces (antes 3 a 16s; ahora minutos)
     if (g_blackoutMute)
-        g_voiceSilenceLeft = randRange(3.0f, 9.0f);
+        g_voiceSilenceLeft = randRange(70.0f, 160.0f);
     else
-        g_voiceSilenceLeft = randRange(6.0f, 16.0f);
+        g_voiceSilenceLeft = randRange(120.0f, 280.0f);
 }
 
 static void applyAdmiracionVolume()
@@ -641,7 +672,7 @@ static void updateAdmiracionAlarm(float deltaTime)
 
     if (g_admiracionPlaying)
     {
-        // Clip termino -> silencio aleatorio, luego otra vez
+        // Clip termino a silencio aleatorio, luego otra vez
         if (g_admiracionReady && ma_sound_is_playing(&g_admiracion) != MA_TRUE)
         {
             g_admiracionPlaying = false;
@@ -868,7 +899,7 @@ void AudioBgm_Update(float deltaTime, bool gameActive)
         const float t = (g_fadeOutDuration > 1e-3f)
             ? (g_fadeOutTimer / g_fadeOutDuration)
             : 1.0f;
-        // Curva suave (ease-out): baja lento al principio, mas rapido al final
+        // Curva suave (ease out): baja lento al principio, mas rapido al final
         const float u = (t >= 1.0f) ? 1.0f : (t * t);
         const float vol = g_fadeOutStartVol * (1.0f - u);
         if (g_soundReady)
@@ -1031,4 +1062,135 @@ void AudioBgm_ProximityStop()
     ma_sound_set_volume(&g_prox, 0.0f);
     ma_sound_stop(&g_prox);
     g_proxPlaying = false;
+}
+
+void AudioBgm_TimerTickStop()
+{
+    if (g_tickReady)
+    {
+        ma_sound_stop(&g_tick);
+        ma_sound_uninit(&g_tick);
+        g_tickReady = false;
+    }
+    g_tickPlaying = false;
+    g_tickMode = 0;
+}
+
+void AudioBgm_TimerTickSetPaths(const char* pathChase, const char* pathRage)
+{
+#if defined(_MSC_VER)
+    if (pathChase && pathChase[0])
+        strncpy_s(g_tickPathChase, sizeof(g_tickPathChase), pathChase, _TRUNCATE);
+    if (pathRage && pathRage[0])
+        strncpy_s(g_tickPathRage, sizeof(g_tickPathRage), pathRage, _TRUNCATE);
+#else
+    if (pathChase && pathChase[0]) {
+        std::strncpy(g_tickPathChase, pathChase, sizeof(g_tickPathChase) - 1);
+        g_tickPathChase[sizeof(g_tickPathChase) - 1] = '\0';
+    }
+    if (pathRage && pathRage[0]) {
+        std::strncpy(g_tickPathRage, pathRage, sizeof(g_tickPathRage) - 1);
+        g_tickPathRage[sizeof(g_tickPathRage) - 1] = '\0';
+    }
+#endif
+    std::cout << "[Audio] Timer tick paths chase=" << g_tickPathChase
+              << " rage=" << g_tickPathRage << "\n";
+}
+
+void AudioBgm_TimerTickSetMode(int mode)
+{
+    if (mode < 0) mode = 0;
+    if (mode > 2) mode = 2;
+    if (mode == g_tickMode && (mode == 0 || g_tickPlaying))
+        return;
+
+    AudioBgm_TimerTickStop();
+    g_tickMode = mode;
+    if (mode == 0)
+        return;
+
+    if (!g_engineReady)
+    {
+        if (!AudioBgm_Init())
+            return;
+    }
+
+    const char* path = (mode == 2) ? g_tickPathRage : g_tickPathChase;
+    if (!path || !path[0])
+    {
+        std::cout << "[Audio] Timer tick: path vacio mode=" << mode << "\n";
+        g_tickMode = 0;
+        return;
+    }
+
+    ma_result result = ma_sound_init_from_file(
+        &g_engine, path, MA_SOUND_FLAG_STREAM, NULL, NULL, &g_tick);
+    if (result != MA_SUCCESS)
+    {
+        std::cout << "[Audio] No se pudo cargar timer tick: " << path
+                  << " (" << (int)result << ")\n";
+        g_tickMode = 0;
+        return;
+    }
+
+    g_tickReady = true;
+    ma_sound_set_looping(&g_tick, MA_TRUE);
+    const float baseVol = (mode == 2) ? g_tickRageVol : g_tickChaseVol;
+    ma_sound_set_volume(&g_tick, effectiveSfx(baseVol));
+    // Rage: pitch un poco mas grave (ya viene distorsionado; refuerzo)
+    ma_sound_set_pitch(&g_tick, (mode == 2) ? 0.88f : 1.0f);
+    result = ma_sound_start(&g_tick);
+    if (result != MA_SUCCESS)
+    {
+        std::cout << "[Audio] No se pudo start timer tick (" << (int)result << ")\n";
+        ma_sound_uninit(&g_tick);
+        g_tickReady = false;
+        g_tickMode = 0;
+        return;
+    }
+    g_tickPlaying = true;
+    std::cout << "[Audio] Timer tick mode=" << mode << " -> " << path << "\n";
+}
+
+bool AudioBgm_TypewriterStart(const char* path, float volume)
+{
+    AudioBgm_TypewriterStop();
+    if (!path || !path[0])
+        return false;
+    if (!g_engineReady)
+    {
+        if (!AudioBgm_Init())
+            return false;
+    }
+    ma_result result = ma_sound_init_from_file(
+        &g_engine, path, MA_SOUND_FLAG_STREAM, NULL, NULL, &g_typewriter);
+    if (result != MA_SUCCESS)
+    {
+        std::cout << "[Audio] Typewriter load fail: " << path << " (" << (int)result << ")\n";
+        return false;
+    }
+    g_typewriterReady = true;
+    ma_sound_set_looping(&g_typewriter, MA_FALSE);
+    ma_sound_set_volume(&g_typewriter, effectiveSfx(volume));
+    result = ma_sound_start(&g_typewriter);
+    if (result != MA_SUCCESS)
+    {
+        std::cout << "[Audio] Typewriter start fail (" << (int)result << ")\n";
+        ma_sound_uninit(&g_typewriter);
+        g_typewriterReady = false;
+        return false;
+    }
+    g_typewriterPlaying = true;
+    std::cout << "[Audio] Typewriter playing: " << path << "\n";
+    return true;
+}
+
+void AudioBgm_TypewriterStop()
+{
+    if (!g_typewriterReady)
+        return;
+    ma_sound_stop(&g_typewriter);
+    ma_sound_uninit(&g_typewriter);
+    g_typewriterReady = false;
+    g_typewriterPlaying = false;
 }

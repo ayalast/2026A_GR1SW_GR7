@@ -27,6 +27,8 @@
 #include "audio_bgm.h"
 #include "game_lights.h"
 #include "game_ui.h"
+#include "game_survival.h"
+#include "game_text.h"
 
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb_image.h>
@@ -57,7 +59,7 @@ static const float STREAM_SHADOW_RADIUS = 80.0f;
 static const float STREAM_LIGHT_RADIUS  = 100.0f;
 static const int   STREAM_MAX_POINT_LIGHTS = 48;
 
-// true = carga rapida solo mapa+luces (debug); false = demo completa
+// true es carga rapida solo mapa+luces (debug); false es demo completa
 static const bool LIGHTING_FAST_LOAD = false;
 
 // Camara
@@ -75,6 +77,41 @@ glm::vec3 backroomsPos(0.0f, -3.0f, 0.0f);
 
 // Colisiones
 CollisionManager colManager;
+// AABBs de monstruos estaticos (se quitan en survival para no dejar cajas invisibles)
+static std::vector<AABB> g_demonStaticBoxes;
+static size_t g_demonColStart = 0;
+static size_t g_demonColCount = 0;
+static bool g_demonColsActive = true;
+// Bounds locales del monstruo (jumpscare: anclar cara a camara)
+static AABB g_demonBoundsLocal{};
+
+static glm::vec3 survivalCorrectMove(const glm::vec3& pos, const glm::vec3& delta, float radius, void* user)
+{
+    auto* cm = static_cast<CollisionManager*>(user);
+    return cm->correctMovement(pos, delta, radius);
+}
+
+static void survivalRemoveDemonCollisions()
+{
+    if (!g_demonColsActive || g_demonColCount == 0)
+        return;
+    if (g_demonColStart + g_demonColCount <= colManager.staticBoxCount())
+        colManager.eraseStaticBoxes(g_demonColStart, g_demonColCount);
+    g_demonColsActive = false;
+    std::cout << "[Survival] AABBs monstruo estatico desactivados (" << g_demonColCount << ")\n";
+}
+
+static void survivalRestoreDemonCollisions()
+{
+    if (g_demonColsActive || g_demonStaticBoxes.empty())
+        return;
+    g_demonColStart = colManager.staticBoxCount();
+    for (const AABB& b : g_demonStaticBoxes)
+        colManager.addStaticBox(b);
+    g_demonColCount = g_demonStaticBoxes.size();
+    g_demonColsActive = true;
+    std::cout << "[Survival] AABBs monstruo estatico restaurados (" << g_demonColCount << ")\n";
+}
 
 bool flashlightOn = false;
 
@@ -100,7 +137,7 @@ static float admBlackoutTimer = 0.0f;
 static float admBlackoutNext  = 16.0f;
 static float g_admFlicker     = 1.0f;
 
-// Arrastre de sliders de volumen (0 = ninguno)
+// Arrastre de sliders de volumen (0 es ninguno)
 static int g_volDrag = 0;
 
 static float distXZ(const glm::vec3& a, const glm::vec3& b)
@@ -509,7 +546,7 @@ std::vector<Instance> generatePhoneBooths(const AABB& roomBounds, const AABB& bo
 
 void drawPlanarShadows(Shader& shadowShader, Model& model, const std::vector<Instance>& instances, float floorY, glm::vec3 lightDir, bool firstMeshOnly = false, float maxDist = 1e9f)
 {
-    // Crear la matriz de proyección de sombra plana para GLM (Column-Major)
+    // Crear la matriz de proyección de sombra plana para GLM (Column Major)
     glm::mat4 shadowMat(1.0f);
 
     // Evitar la división por cero si la luz apunta completamente horizontal
@@ -522,7 +559,7 @@ void drawPlanarShadows(Shader& shadowShader, Model& model, const std::vector<Ins
 
     // Columna 3 de la matriz: Traslada la sombra proyectada al nivel exacto del suelo
     shadowMat[3][0] = floorY * (lightDir.x / lightDir.y);
-    shadowMat[3][1] = floorY + 0.002f; // Offset milimétrico para evitar Z-Fighting (parpadeo de texturas)
+    shadowMat[3][1] = floorY + 0.002f; // Offset milimétrico para evitar Z Fighting (parpadeo de texturas)
     shadowMat[3][2] = floorY * (lightDir.z / lightDir.y);
 
     for (const Instance& instance : instances)
@@ -596,7 +633,7 @@ void drawCameraInstances(
 // colisiones
 
 // params: usar solo la primera malla, cuanto inflar en XZ y el techo minimo del AABB.
-// el minTopY es clave: si el objeto queda bajo el ojo (Y=0) la colision no frena y se atraviesa.
+// el minTopY es clave: si el objeto queda bajo el ojo (Y 0) la colision no frena y se atraviesa.
 void addInstancesCollision(
     CollisionManager& manager,
     const Model& model,
@@ -664,6 +701,11 @@ static void applyLightPresentation()
 
 static void toggleLightsBlackoutMode()
 {
+    if (Survival_IsEnabled() && Survival_IsCycleActive())
+    {
+        std::cout << "[Survival] Luces controladas por el ciclo (L ignorado)\n";
+        return;
+    }
     if (lightPresentation == LightPresentation::Blackout)
         lightPresentation = LightPresentation::Normal;
     else
@@ -673,6 +715,11 @@ static void toggleLightsBlackoutMode()
 
 static void toggleAdmiracionMode()
 {
+    if (Survival_IsEnabled() && Survival_IsCycleActive())
+    {
+        std::cout << "[Survival] Luces controladas por el ciclo (M ignorado)\n";
+        return;
+    }
     if (lightPresentation == LightPresentation::Admiracion)
         lightPresentation = LightPresentation::Normal;
     else
@@ -681,6 +728,53 @@ static void toggleAdmiracionMode()
     std::cout << "[UI] MODO ADMIRACION "
               << (lightPresentation == LightPresentation::Admiracion ? "ON (rojo + alarma + monstruo)" : "OFF")
               << "\n";
+}
+
+static void survivalSyncLights()
+{
+    SurvivalLightWant w = Survival_DesiredLight();
+    if (w == SurvivalLightWant::DontCare)
+        return;
+    LightPresentation want = LightPresentation::Normal;
+    if (w == SurvivalLightWant::Blackout) want = LightPresentation::Blackout;
+    else if (w == SurvivalLightWant::Admiracion) want = LightPresentation::Admiracion;
+    if (lightPresentation != want)
+    {
+        lightPresentation = want;
+        applyLightPresentation();
+    }
+}
+
+static void survivalToggleFromUi(const glm::vec3& playerPos)
+{
+    const bool next = !Survival_IsEnabled();
+    Survival_SetEnabled(next);
+    Survival_SetCollisionProbe(survivalCorrectMove, &colManager);
+    if (next)
+    {
+        survivalRemoveDemonCollisions();
+        // El check se activa casi siempre desde PAUSA: hay que arrancar Hunt aqui.
+        // En pausa el timer no descuenta (worldPlaying false); al CONTINUAR sigue desde 60s.
+        if (appState == AppState::Playing || appState == AppState::FadeIn
+            || appState == AppState::Paused)
+        {
+            Survival_StartCycle(playerPos);
+            survivalSyncLights();
+            std::cout << "[Survival] ON + ciclo Hunt iniciado (timer pausado hasta CONTINUAR)\n";
+        }
+        else
+        {
+            std::cout << "[Survival] ON — el ciclo Hunt arrancara al COMENZAR\n";
+        }
+    }
+    else
+    {
+        Survival_StopCycle();
+        survivalRestoreDemonCollisions();
+        lightPresentation = LightPresentation::Normal;
+        applyLightPresentation();
+        std::cout << "[Survival] OFF — estado main (sin timers/IA)\n";
+    }
 }
 
 // Luces de techo: ver game_lights.cpp (findCeilingLights / applyCeilingLightMode)
@@ -756,7 +850,7 @@ int main() {
     SCR_WIDTH = static_cast<unsigned int>(winW);
     SCR_HEIGHT = static_cast<unsigned int>(winH);
 
-    // monitor = NULL => modo ventana (no exclusive fullscreen)
+    // monitor es NULL a modo ventana (no exclusive fullscreen)
     GLFWwindow* window = glfwCreateWindow(winW, winH, "Backrooms - Grupo 7", NULL, NULL);
     if (window == NULL) {
         std::cout << "Error al crear la ventana GLFW. Revisa la DLL." << std::endl;
@@ -796,7 +890,7 @@ int main() {
     glEnable(GL_DEPTH_TEST);
     glClearColor(0.04f, 0.04f, 0.06f, 1.0f);
 
-    // --- Splash 2D (pantalla de carga real, no solo titulo de ventana) ---
+    // Splash 2D (pantalla de carga real, no solo titulo de ventana)
     std::unique_ptr<Shader> splashShader = std::make_unique<Shader>("shaders/splash.vs", "shaders/splash.fs");
     unsigned int splashVAO = 0, splashVBO = 0, splashTex = 0;
     {
@@ -845,7 +939,7 @@ int main() {
             std::cout << "[Load] No se encontro textures/splash.png, usando color solido.\n";
         }
         glBindTexture(GL_TEXTURE_2D, 0);
-        // No dejar flip=true: modelos usan Assimp FlipUVs + stbi flip false
+        // No dejar flip true: modelos usan Assimp FlipUVs + stbi flip false
         stbi_set_flip_vertically_on_load(false);
     }
 
@@ -1016,7 +1110,7 @@ int main() {
         }
         drawFullscreenTex(splashTex, dim, 1.0f, true);
 
-        // Barra de progreso realista (NDC, zona inferior-centro)
+        // Barra de progreso realista (NDC, zona inferior centro)
         const float barX0 = -0.22f, barX1 = 0.22f;
         const float barY0 = -0.28f, barY1 = -0.24f;
         drawNdcTexturedQuad(barX0, barY0, barX1, barY1, barBgTex, 0, 0, 1, 1, 1.0f);
@@ -1032,7 +1126,7 @@ int main() {
     };
 
     // Pesos relativos por etapa (incluyen props: se cargan AQUI, no al caminar)
-    // Suma = 1.0
+    // Suma es 1.0
     const float W_SHADERS = 0.03f;
     const float W_COLLISION = 0.10f;
     const float W_LEVEL = 0.16f;
@@ -1100,7 +1194,7 @@ int main() {
     const float cameraScale = 1.0f;
     const float cameraWallGap = 0.02f;
 
-    // --- ETAPA 1: shaders de juego ---
+    // ETAPA 1: shaders de juego
     if (!drawSplashFrame("Backrooms - Cargando shaders...", progressBase + W_SHADERS * 0.3f)) { glfwTerminate(); return 0; }
     backroomsShader = std::make_unique<Shader>("shaders/backrooms.vs", "shaders/backrooms.fs");
     cubeShader = std::make_unique<Shader>("shaders/basico.vs", "shaders/basico.fs");
@@ -1108,14 +1202,14 @@ int main() {
     if (!drawSplashFrame("Backrooms - Shaders listos", progressBase)) { glfwTerminate(); return 0; }
     std::cout << "[Load] Shaders OK\n";
 
-    // --- ETAPA 2: colisiones del mapa ---
+    // ETAPA 2: colisiones del mapa
     if (!drawSplashFrame("Backrooms - Cargando colisiones del mapa...", progressBase + W_COLLISION * 0.2f)) { glfwTerminate(); return 0; }
     backroomsCollisionsModel = std::make_unique<Model>("models/backrooms_level_0_collisions/backrooms.obj");
     roomLocalBounds = computeModelBounds(*backroomsCollisionsModel);
     roomWorldBounds = { roomLocalBounds.min + backroomsPos, roomLocalBounds.max + backroomsPos };
     roomCenter = (roomWorldBounds.min + roomWorldBounds.max) * 0.5f;
     floorY = roomWorldBounds.min.y;
-    // Anclas de pared solo hacen falta para colocar camaras (props) -> omitir en modo rapido
+    // Anclas de pared solo hacen falta para colocar camaras (props) a omitir en modo rapido
     if (!LIGHTING_FAST_LOAD)
         wallAnchors = collectWallAnchors(*backroomsCollisionsModel, backroomsPos);
     colManager.addStaticBox(*backroomsCollisionsModel, backroomsPos);
@@ -1123,14 +1217,14 @@ int main() {
     if (!drawSplashFrame("Backrooms - Colisiones listas", progressBase)) { glfwTerminate(); return 0; }
     std::cout << "[Load] Colisiones OK (meshes " << backroomsCollisionsModel->meshes.size() << ")\n";
 
-    // --- ETAPA 3: nivel visual (suele ser la mas pesada; necesario para ver iluminacion) ---
+    // ETAPA 3: nivel visual (suele ser la mas pesada; necesario para ver iluminacion)
     if (!drawSplashFrame("Backrooms - Cargando nivel (Backrooms)...", progressBase + W_LEVEL * 0.15f)) { glfwTerminate(); return 0; }
     backroomsModel = std::make_unique<Model>("models/backrooms_level_0/backrooms.obj");
     progressBase += W_LEVEL;
     if (!drawSplashFrame("Backrooms - Nivel listo", progressBase)) { glfwTerminate(); return 0; }
     std::cout << "[Load] Nivel visual OK\n";
 
-    // --- ETAPA 4: border (omitido en modo rapido: no aporta a iluminacion) ---
+    // ETAPA 4: border (omitido en modo rapido: no aporta a iluminacion)
     if (LIGHTING_FAST_LOAD)
     {
         progressBase += W_BORDER;
@@ -1146,7 +1240,7 @@ int main() {
         std::cout << "[Load] Border OK\n";
     }
 
-    // --- ETAPA 5: luces de techo (rejilla CPU, no lee el mesh) ---
+    // ETAPA 5: luces de techo (rejilla CPU, no lee el mesh)
     if (!drawSplashFrame("Backrooms - Preparando luces...", progressBase + W_LIGHTS * 0.1f)) { glfwTerminate(); return 0; }
     std::vector<CeilingLight> ceilingLights;
     findCeilingLights(backroomsPos, ceilingLights, lightsBlackoutMode);
@@ -1155,7 +1249,7 @@ int main() {
     if (!drawSplashFrame("Backrooms - Luces listas", progressBase)) { glfwTerminate(); return 0; }
     std::cout << "[Load] Luces de techo: " << ceilingLights.size() << "\n";
 
-    // --- ETAPA 6: audio (en modo rapido solo init SFX; sin musica de carga) ---
+    // ETAPA 6: audio (en modo rapido solo init SFX; sin musica de carga)
     if (!drawSplashFrame("Backrooms - Cargando audio...", progressBase + W_AUDIO * 0.3f)) { glfwTerminate(); return 0; }
     if (AudioBgm_Init())
     {
@@ -1272,10 +1366,35 @@ int main() {
 
     if (!drawSplashFrame("Backrooms - Cargando entidad...", progressBase + W_DEMON * 0.3f)) { AudioBgm_Shutdown(); glfwTerminate(); return 0; }
     monsterAlienModel = std::make_unique<Model>("models/monster_alien/scene.obj");
+    AABB demonBoundsLocal{};
+    float demonGroundY = 0.0f;
     {
-        const AABB demonBounds = computeModelBounds(*monsterAlienModel);
-        demonInstances = createFloorInstances(demonAnchors, roomWorldBounds, demonBounds, floorY, 1.8f, demonYaws, 0.45f);
-        addInstancesCollision(colManager, *monsterAlienModel, demonInstances);
+        demonBoundsLocal = computeModelBounds(*monsterAlienModel);
+        g_demonBoundsLocal = demonBoundsLocal;
+        demonInstances = createFloorInstances(demonAnchors, roomWorldBounds, demonBoundsLocal, floorY, 1.8f, demonYaws, 0.45f);
+        // Guardar AABBs y registrarlos; en survival se borran para no dejar "paredes fantasma"
+        g_demonStaticBoxes.clear();
+        g_demonColStart = colManager.staticBoxCount();
+        {
+            const AABB localBounds = demonBoundsLocal;
+            for (const Instance& instance : demonInstances)
+            {
+                AABB worldBounds = transformBounds(localBounds, buildInstanceMatrix(instance));
+                g_demonStaticBoxes.push_back(worldBounds);
+                colManager.addStaticBox(worldBounds);
+            }
+        }
+        g_demonColCount = g_demonStaticBoxes.size();
+        g_demonColsActive = true;
+        if (!demonInstances.empty())
+            demonGroundY = demonInstances[0].position.y;
+        else
+            demonGroundY = floorY - (demonBoundsLocal.min.y * 1.8f);
+        SurvivalRoomBounds srb{};
+        srb.min = roomWorldBounds.min;
+        srb.max = roomWorldBounds.max;
+        Survival_Init(srb, demonGroundY, 1.8f);
+        Survival_SetCollisionProbe(survivalCorrectMove, &colManager);
         // Aviso de proximidad (loop; volumen por distancia, el mp3 es muy fuerte)
         if (!AudioBgm_ProximityLoad("sounds/entity_proximity.mp3"))
             std::cout << "[Audio] Aviso: no se cargo entity_proximity.mp3\n";
@@ -1297,7 +1416,7 @@ int main() {
         const AABB computerBounds = computeModelBounds(*sciFiComputerModel);
         computerInstances = createFloorInstances(
             computerAnchors, roomWorldBounds, computerBounds, floorY, 1.0f, computerYaws, 0.35f);
-        // Mesh tope ~ floorY+2.9 = -0.1 < ojo Y=0: sin minTopY se atraviesa (normal vertical).
+        // Mesh tope ~ floorY+2.9 es 0.1 < ojo Y 0: sin minTopY se atraviesa (normal vertical).
         addInstancesCollision(colManager, *sciFiComputerModel, computerInstances, false, 0.30f, 1.25f);
         std::cout << "[Load] PCs: " << computerInstances.size() << " (colision solida)\n";
     }
@@ -1318,7 +1437,7 @@ int main() {
     std::cout << "[Load] Todos los props precargados (sin stream al caminar).\n";
     } // end !LIGHTING_FAST_LOAD
 
-    // spawn: mantenemos la altura Y=0 (la correcta a escala del mapa) pero elegimos XZ y
+    // spawn: mantenemos la altura Y 0 (la correcta a escala del mapa) pero elegimos XZ y
     // yaw para no aparecer mirando de frente a una pared
     if (!drawSplashFrame("Backrooms - Preparando spawn...", progressBase + W_SPAWN * 0.4f)) { AudioBgm_Shutdown(); glfwTerminate(); return 0; }
     if (LIGHTING_FAST_LOAD)
@@ -1449,6 +1568,11 @@ int main() {
     menuStartTex = loadUiTexture("textures/menu_start.png");
     menuPauseTex = loadUiTexture("textures/menu_pause.png"); // APAGAR LUCES
     menuPauseLightsOffTex = loadUiTexture("textures/menu_pause_lights_off.png"); // ENCENDER LUCES
+    // Titulos: A2 fijo (Chase); B1/B3 aleatorios (Rage)
+    unsigned int titleLucesTex = loadUiTexture("textures/survival/title_luces_apagadas.png"); // A2
+    unsigned int titleHuyeB1Tex = loadUiTexture("textures/survival/title_huye_b1.png");
+    unsigned int titleHuyeB3Tex = loadUiTexture("textures/survival/title_huye_b3.png");
+    AudioBgm_TimerTickSetPaths("sounds/timer_tick_chase.mp3", "sounds/timer_tick_rage.mp3");
     ensureBlackTex();
     progressBase += W_UI;
     if (!drawSplashFrame("Backrooms - Interfaz lista", progressBase)) { AudioBgm_Shutdown(); glfwTerminate(); return 0; }
@@ -1509,7 +1633,7 @@ int main() {
     }
     else
     {
-        // Menu principal: SOLO ahora (carga completa, % = 100)
+        // Menu principal: SOLO ahora (carga completa, % es 100)
         appState = AppState::Menu;
         fadeBlack = 1.0f;
         glfwSetWindowTitle(window, "Backrooms - Menu");
@@ -1532,6 +1656,266 @@ int main() {
 
         processInput(window);
 
+        // Supervivencia: update (timers/IA/cinematicas)
+        {
+            const bool worldPlaying = (appState == AppState::Playing || appState == AppState::FadeIn);
+            if (Survival_IsEnabled() && Survival_IsCycleActive())
+                survivalRemoveDemonCollisions();
+            Survival_Update(deltaTime, camera.Position, camera.Front, survivalCorrectMove, &colManager, worldPlaying);
+            survivalSyncLights();
+
+            // Transiciones de estado app desde survival
+            const SurvivalPhase sp = Survival_GetPhase();
+            if (sp == SurvivalPhase::Jumpscare && appState != AppState::Jumpscare
+                && appState != AppState::Menu && appState != AppState::Ending)
+            {
+                appState = AppState::Jumpscare;
+                glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+                firstMouse = true;
+            }
+            else if (Survival_IsCinematic()
+                && appState != AppState::Ending && appState != AppState::Menu)
+            {
+                appState = AppState::Ending;
+                glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+                firstMouse = true;
+                AudioBgm_EnterMenuLoop();
+            }
+            if (Survival_ConsumeReturnToMenu())
+            {
+                appState = AppState::Menu;
+                glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+                firstMouse = true;
+                AudioBgm_EnterMenuLoop();
+                AudioBgm_ProximitySetVolume(0.0f);
+                lightPresentation = LightPresentation::Normal;
+                applyLightPresentation();
+                glfwSetWindowTitle(window, "Backrooms - Grupo 7");
+            }
+        }
+
+        // Caches de texto 2D (bake solo cuando cambia el string)
+        static TextBake s_promptBake{};
+        static std::string s_promptKey;
+        static TextBake s_cineBake{};
+        static std::string s_cineKey;
+        static TextBake s_phaseBake{};
+        static std::string s_phaseKey;
+        static TextBake s_timerNumBake{};
+        static std::string s_timerKey;
+        static TextBake s_hintBake{};
+        static bool s_hintReady = false;
+        auto ensureText = [&](TextBake& bake, std::string& key, const char* str,
+                              int px, float r, float g, float b) {
+            if (!str) str = "";
+            if (key == str && bake.tex != 0)
+                return;
+            Text_Free(bake);
+            key = str;
+            if (str[0])
+                bake = Text_Bake(str, px, r, g, b, 0.02f, 0.02f, 0.02f, 0.55f, 900);
+        };
+
+        // Ending / jumpscare overlay (pantalla especial)
+        if (appState == AppState::Ending || appState == AppState::Jumpscare)
+        {
+            int w = 0, h = 0;
+            glfwGetFramebufferSize(window, &w, &h);
+            if (w > 0 && h > 0)
+            {
+                SCR_WIDTH = static_cast<unsigned int>(w);
+                SCR_HEIGHT = static_cast<unsigned int>(h);
+                glViewport(0, 0, w, h);
+            }
+            const float aspect = (float)std::max(1u, SCR_WIDTH) / (float)std::max(1u, SCR_HEIGHT);
+
+            if (appState == AppState::Jumpscare)
+            {
+                // Jumpscare a la CARA: camara fija en los ojos del monstruo
+                const float flash = Survival_JumpscareFlash();
+                const float shock = Survival_JumpscareProgress(); // 1 al inicio a 0 al final
+                const float t = (float)glfwGetTime();
+                const float pulse = 0.5f + 0.5f * std::sin(t * 48.0f);
+                // Flash blanco al inicio + sangre
+                const float whiteFlash = std::clamp((shock - 0.85f) / 0.15f, 0.0f, 1.0f);
+                glClearColor(
+                    flash * (0.55f + 0.35f * pulse) + whiteFlash * 0.85f,
+                    flash * 0.02f + whiteFlash * 0.75f,
+                    flash * 0.02f + whiteFlash * 0.7f,
+                    1.0f);
+                glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+                if (monsterAlienModel && backroomsShader)
+                {
+                    // Mas cerca y grande: rostro/torso dominan el frame
+                    const float sc = Survival_MonsterScale() * (1.32f + pulse * 0.06f);
+                    float headLocalY = g_demonBoundsLocal.max.y * 0.80f;
+                    if (headLocalY < 0.4f)
+                        headLocalY = 1.45f;
+                    const float headFromPivot = headLocalY * sc;
+
+                    // Cara casi pegada a la camara
+                    const float faceDist = 0.52f + (1.0f - shock) * 0.12f;
+
+                    // Direccion frontal estable (horizontal) para no mirar al suelo
+                    glm::vec3 front = camera.Front;
+                    front.y = 0.0f;
+                    if (glm::length(front) < 1e-4f)
+                        front = glm::vec3(0.0f, 0.0f, -1.0f);
+                    else
+                        front = glm::normalize(front);
+
+                    // Ancla de la CARA en el centro del FOV
+                    glm::vec3 eye = camera.Position;
+                    glm::vec3 faceAnchor = eye + front * faceDist;
+                    // Pivote del monstruo: cabeza en faceAnchor
+                    Instance scare{};
+                    scare.scale = sc;
+                    scare.position = faceAnchor - camera.WorldUp * headFromPivot;
+                    // Mirar a la camara (yaw hacia el ojo)
+                    {
+                        float dx = eye.x - scare.position.x;
+                        float dz = eye.z - scare.position.z;
+                        scare.rotationDeg = glm::vec3(0.0f, glm::degrees(std::atan2(dx, dz)), 0.0f);
+                    }
+
+                    // Shake fuerte al inicio, luego micro
+                    const float shakeAmp = (0.045f + 0.10f * shock) * (0.55f + 0.45f * pulse);
+                    eye += camera.Right * (std::sin(t * 97.f) * shakeAmp);
+                    eye += camera.WorldUp * (std::cos(t * 73.f) * shakeAmp * 0.7f);
+                    // Look at SIEMPRE a la cara (no a camera.Front)
+                    glm::vec3 lookTarget = faceAnchor + camera.Right * (std::sin(t * 40.f) * 0.012f * shock);
+
+                    backroomsShader->use();
+                    // FOV muy cerrado: claustrofobia, cara llena el cuadro
+                    const float fov = 48.0f + (1.0f - shock) * 8.0f;
+                    glm::mat4 projection = glm::perspective(glm::radians(fov), aspect, 0.05f, 40.0f);
+                    glm::mat4 view = glm::lookAt(eye, lookTarget, camera.WorldUp);
+                    backroomsShader->setMat4("projection", projection);
+                    backroomsShader->setMat4("view", view);
+                    backroomsShader->setVec3("viewPos", eye);
+                    backroomsShader->setBool("lightsBlackout", false);
+                    backroomsShader->setFloat("admiracionAmount", 1.0f);
+                    backroomsShader->setFloat("admiracionFlicker", 0.4f + 0.6f * pulse);
+                    glm::vec3 toFace = glm::normalize(faceAnchor - eye);
+                    backroomsShader->setVec3("dirLight.direction", -toFace);
+                    backroomsShader->setVec3("dirLight.ambient", glm::vec3(0.28f, 0.03f, 0.02f));
+                    backroomsShader->setVec3("dirLight.diffuse", glm::vec3(2.2f, 0.18f, 0.1f));
+                    backroomsShader->setVec3("dirLight.specular", glm::vec3(0.85f));
+                    backroomsShader->setInt("nPointLights", 0);
+                    std::vector<Instance> one{ scare };
+                    glEnable(GL_DEPTH_TEST);
+                    drawInstances(*backroomsShader, *monsterAlienModel, one, false, 50.0f);
+                }
+                // Vignette + sangre en bordes
+                drawNdcTexturedQuad(-1.f, -1.f, 1.f, 1.f, barKnobEdgeTex, 0, 0, 1, 1, flash * 0.55f);
+                // Barras de glitch
+                float gy = std::sin(t * 13.f) * 0.4f;
+                drawNdcTexturedQuad(-1.f, gy, 1.f, gy + 0.035f, barFillTex, 0, 0, 1, 1, 0.18f * flash);
+                ensureText(s_cineBake, s_cineKey, "NO HAY SALIDA", 72, 1.0f, 0.12f, 0.08f);
+                if (s_cineBake.tex)
+                    Text_DrawCentered(s_cineBake.tex, s_cineBake.width, s_cineBake.height,
+                        std::sin(t * 25.f) * 0.025f * flash,
+                        -0.62f + std::sin(t * 18.f) * 0.015f,
+                        0.055f, aspect, 0.35f + 0.55f * flash,
+                        splashVAO, splashVBO, splashShader.get());
+                glfwSetWindowTitle(window, "Backrooms | JUMPSCARE");
+            }
+            else // Ending: 1s blanco + maquina de escribir (sin glitch)
+            {
+                const int style = Survival_CinematicStyle();
+                const bool whiteHold = Survival_CinematicIsWhiteHold();
+                // Fondo blanco (kill/escape) o papel muy claro; lose: blanco roto
+                if (style == 2)
+                    glClearColor(0.97f, 0.94f, 0.92f, 1.0f);
+                else
+                    glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
+                glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+                if (!whiteHold)
+                {
+                    // Texto negro maquina de escribir (Times), estable, sin vibracion
+                    float tr = 0.08f, tg = 0.08f, tb = 0.08f;
+                    if (style == 2) { tr = 0.22f; tg = 0.04f; tb = 0.04f; }
+
+                    // Layout FIJO: se hornea el mensaje COMPLETO una vez para fijar
+                    // tamano de lienzo y escala; el texto parcial (typewriter) se
+                    // dibuja dentro de ese mismo lienzo a letras quietas, sin zoom.
+                    const int   kTypePx = 62;    // ~72% mas grande que antes (36)
+                    const int   kTypeWrap = 1180;
+                    const float kTypeCx = 0.0f;
+                    const float kTypeCy = 0.02f;
+
+                    const char* full = Survival_CinematicFullMessage();
+                    static std::string s_fullKey;
+                    static int   s_canvasW = 0, s_canvasH = 0;
+                    static float s_halfH = 0.38f;
+                    if (full && full[0] && s_fullKey != full)
+                    {
+                        s_fullKey = full;
+                        // Bake temporal del mensaje completo solo para medir el lienzo.
+                        TextBake meas = Text_Bake(full, kTypePx, tr, tg, tb,
+                            0, 0, 0, 0, kTypeWrap, L"Times New Roman");
+                        s_canvasW = meas.width;
+                        s_canvasH = meas.height;
+                        if (s_canvasH > 0 && s_canvasW > 0)
+                        {
+                            const float texAspect = (float)s_canvasW / (float)s_canvasH;
+                            s_halfH = std::clamp(0.62f / std::max(texAspect, 0.5f), 0.22f, 0.52f);
+                        }
+                        Text_Free(meas);
+                    }
+
+                    const char* body = Survival_CinematicBodyText();
+                    static std::string s_typeKey;
+                    static TextBake s_typeBake{};
+                    if (body && body[0] && s_canvasW > 0 && s_canvasH > 0)
+                    {
+                        if (s_typeKey != body || s_typeBake.tex == 0)
+                        {
+                            Text_Free(s_typeBake);
+                            s_typeKey = body;
+                            // Prefijo dibujado dentro del lienzo FIJO del mensaje completo.
+                            s_typeBake = Text_Bake(body, kTypePx, tr, tg, tb, 0, 0, 0, 0,
+                                kTypeWrap, L"Times New Roman", s_canvasW, s_canvasH);
+                        }
+                        if (s_typeBake.tex)
+                            Text_DrawCentered(s_typeBake.tex, s_typeBake.width, s_typeBake.height,
+                                kTypeCx, kTypeCy, s_halfH, aspect, 1.0f,
+                                splashVAO, splashVBO, splashShader.get());
+                    }
+
+                    if (Survival_CinematicDone())
+                    {
+                        static TextBake s_hintW{};
+                        static bool s_hintWReady = false;
+                        if (!s_hintWReady)
+                        {
+                            s_hintW = Text_Bake("Enter / Click para continuar", 32, 0.3f, 0.3f, 0.3f,
+                                0, 0, 0, 0, 700, L"Times New Roman");
+                            s_hintWReady = true;
+                        }
+                        if (s_hintW.tex)
+                            Text_DrawCentered(s_hintW.tex, s_hintW.width, s_hintW.height,
+                                0.0f, -0.78f, 0.030f, aspect, 0.9f,
+                                splashVAO, splashVBO, splashShader.get());
+                    }
+                }
+
+                const char* full = Survival_CinematicFullLine();
+                if (full)
+                {
+                    char title[256];
+                    std::snprintf(title, sizeof(title), "Backrooms | %s", full);
+                    glfwSetWindowTitle(window, title);
+                }
+            }
+
+            glfwSwapBuffers(window);
+            glfwPollEvents();
+            continue;
+        }
+
         // menu / pausa: aca solo va la UI 2D, sin mundo 3D
         if (appState == AppState::Menu || appState == AppState::Paused)
         {
@@ -1552,7 +1936,7 @@ int main() {
             unsigned int uiTex = menuStartTex;
             if (appState == AppState::Paused)
             {
-                // Texto del boton: si luces ON -> "APAGAR LUCES"; si OFF -> "ENCENDER LUCES"
+                // Texto del boton: si luces ON a "APAGAR LUCES"; si OFF a "ENCENDER LUCES"
                 uiTex = lightsBlackoutMode ? menuPauseLightsOffTex : menuPauseTex;
                 if (uiTex == 0)
                     uiTex = menuPauseTex;
@@ -1653,10 +2037,11 @@ int main() {
                     const char* modeName = "Normal";
                     if (lightPresentation == LightPresentation::Blackout) modeName = "Blackout";
                     else if (lightPresentation == LightPresentation::Admiracion) modeName = "Admiracion";
-                    char t[220];
+                    char t[280];
                     std::snprintf(t, sizeof(t),
-                        "Pausa [%s] | Master %d%%  Musica %d%%  Efectos %d%%",
+                        "Pausa [%s] | Surv %s | Master %d%%  Musica %d%%  SFX %d%% | G=supervivencia",
                         modeName,
+                        Survival_IsEnabled() ? "ON" : "OFF",
                         (int)std::round(AudioBgm_GetMasterVolume() * 100.f),
                         (int)std::round(AudioBgm_GetMusicVolume() * 100.f),
                         (int)std::round(AudioBgm_GetSfxVolume() * 100.f));
@@ -1666,6 +2051,70 @@ int main() {
                 drawSliderFill(sliderNy[0], AudioBgm_GetMasterVolume());
                 drawSliderFill(sliderNy[1], AudioBgm_GetMusicVolume());
                 drawSliderFill(sliderNy[2], AudioBgm_GetSfxVolume());
+
+                // Checkbox modo supervivencia: caja con borde + ✓ al activar (no bloque solido)
+                {
+                    float cx, cy, half, labelNy;
+                    Survival_GetCheckboxLayout(cx, cy, half, labelNy);
+                    auto nyToNdc = [](float ny) { return 1.0f - 2.0f * ny; };
+                    auto nxToNdc = [](float nx) { return nx * 2.0f - 1.0f; };
+                    const float aspect = (float)std::max(1u, SCR_WIDTH) / (float)std::max(1u, SCR_HEIGHT);
+                    // Caja un poco mas grande y cuadrada en NDC
+                    const float boxHalf = 0.022f;
+                    const float x0 = nxToNdc(cx) - boxHalf;
+                    const float x1 = nxToNdc(cx) + boxHalf;
+                    const float y0 = nyToNdc(cy) - boxHalf * aspect; // compensar aspect a cuadrado visual
+                    const float y1 = nyToNdc(cy) + boxHalf * aspect;
+                    const float border = 0.0045f;
+                    const bool on = Survival_IsEnabled();
+
+                    // Fondo interior (vacio / oscuro suave)
+                    drawNdcTexturedQuad(x0, y0, x1, y1, barGlowTex, 0, 0, 1, 1, on ? 0.22f : 0.14f);
+                    // Marco: 4 lados (borde claro)
+                    drawNdcTexturedQuad(x0, y0, x1, y0 + border, barKnobEdgeTex, 0, 0, 1, 1, 0.95f); // abajo
+                    drawNdcTexturedQuad(x0, y1 - border, x1, y1, barKnobEdgeTex, 0, 0, 1, 1, 0.95f); // arriba
+                    drawNdcTexturedQuad(x0, y0, x0 + border, y1, barKnobEdgeTex, 0, 0, 1, 1, 0.95f); // izq
+                    drawNdcTexturedQuad(x1 - border, y0, x1, y1, barKnobEdgeTex, 0, 0, 1, 1, 0.95f); // der
+                    // Sombra exterior sutil
+                    drawNdcTexturedQuad(x0 - 0.003f, y0 - 0.003f, x1 + 0.003f, y1 + 0.003f,
+                        barKnobEdgeTex, 0, 0, 1, 1, 0.25f);
+
+                    // Simbolo check cuando esta ON
+                    static TextBake s_checkMark{};
+                    static bool s_checkMarkReady = false;
+                    if (!s_checkMarkReady)
+                    {
+                        // UTF 8 check mark
+                        s_checkMark = Text_Bake("\xE2\x9C\x93", 52, 0.55f, 0.95f, 0.45f, 0, 0, 0, 0, 80);
+                        if (!s_checkMark.tex)
+                            s_checkMark = Text_Bake("V", 48, 0.55f, 0.95f, 0.45f, 0, 0, 0, 0, 80);
+                        s_checkMarkReady = true;
+                    }
+                    if (on && s_checkMark.tex)
+                    {
+                        Text_DrawCentered(s_checkMark.tex, s_checkMark.width, s_checkMark.height,
+                            nxToNdc(cx), nyToNdc(cy), 0.020f, aspect, 1.0f,
+                            splashVAO, splashVBO, splashShader.get());
+                    }
+
+                    // Etiqueta a la derecha
+                    static TextBake s_survLabel{};
+                    static TextBake s_survLabelOn{};
+                    static bool s_survLabelsReady = false;
+                    if (!s_survLabelsReady)
+                    {
+                        s_survLabel = Text_Bake("Modo supervivencia  (G)", 26, 0.82f, 0.78f, 0.68f, 0, 0, 0, 0, 420);
+                        s_survLabelOn = Text_Bake("Modo supervivencia  ON  (G)", 26, 0.75f, 0.95f, 0.55f, 0, 0, 0, 0, 420);
+                        s_survLabelsReady = true;
+                    }
+                    TextBake& lab = on ? s_survLabelOn : s_survLabel;
+                    if (lab.tex)
+                    {
+                        Text_DrawCentered(lab.tex, lab.width, lab.height,
+                            nxToNdc(cx + 0.14f), nyToNdc(labelNy), 0.020f, aspect, 0.96f,
+                            splashVAO, splashVBO, splashShader.get());
+                    }
+                }
             }
 
             glfwSwapBuffers(window);
@@ -1673,7 +2122,7 @@ int main() {
             continue;
         }
 
-        // fade-in / playing: ya se dibuja el mundo 3D
+        // fade in / playing: ya se dibuja el mundo 3D
         if (appState == AppState::FadeIn)
         {
             fadeBlack -= deltaTime / FADE_IN_SECONDS;
@@ -1692,7 +2141,7 @@ int main() {
 
         backroomsShader->use();
 
-        // Eye con head-bob: camara + linterna comparten el mismo offset (coherente al caminar)
+        // Eye con head bob: camara + linterna comparten el mismo offset (coherente al caminar)
         const glm::vec3 eyePos = camera.Position + headBobOffset;
         const glm::vec3 eyeFront = camera.Front;
         const glm::vec3 eyeUp = camera.Up;
@@ -1700,23 +2149,47 @@ int main() {
         // Volumen de la entidad segun distancia (en admiracion se oye mas cerca)
         {
             float minDemonDist = 1e9f;
-            for (const Instance& demon : demonInstances)
+            if (Survival_HasLiveMonster())
             {
-                float d = glm::distance(camera.Position, demon.position);
-                if (d < minDemonDist)
-                    minDemonDist = d;
+                minDemonDist = glm::distance(camera.Position, Survival_MonsterPosition());
+            }
+            else
+            {
+                for (const Instance& demon : demonInstances)
+                {
+                    float d = glm::distance(camera.Position, demon.position);
+                    if (d < minDemonDist)
+                        minDemonDist = d;
+                }
             }
             const float hearFar = 48.0f;
             const float hearNear = 5.0f;
             const float maxProxVol = 0.035f; // techo intencional (archivo desproporcionado)
             float t = 0.0f;
-            if (minDemonDist < hearFar && !demonInstances.empty())
+            if (minDemonDist < hearFar && (Survival_HasLiveMonster() || !demonInstances.empty()))
             {
                 t = 1.0f - glm::clamp((minDemonDist - hearNear) / (hearFar - hearNear), 0.0f, 1.0f);
                 t = t * t * (3.0f - 2.0f * t); // smoothstep
             }
             float proxVol = t * maxProxVol;
-            if (lightPresentation == LightPresentation::Admiracion)
+            // Persecución (Chase/Rage): feedback FUERTE y con rango amplio para que el
+            // jugador oiga si el monstruo le corta terreno. Sube más cuanto más cerca.
+            const SurvivalPhase proxPh = Survival_GetPhase();
+            const bool chasing = Survival_IsCycleActive()
+                && (proxPh == SurvivalPhase::Chase || proxPh == SurvivalPhase::Rage);
+            if (chasing && !Survival_IsChaseGrace())
+            {
+                const float chaseHearFar = 40.0f;
+                const float chaseHearNear = 2.0f;
+                float ct = 1.0f - glm::clamp(
+                    (minDemonDist - chaseHearNear) / (chaseHearFar - chaseHearNear), 0.0f, 1.0f);
+                ct = ct * ct * (3.0f - 2.0f * ct);
+                // Rage un poco más intenso que Chase (bestia enfurecida).
+                const float chaseCeil = (proxPh == SurvivalPhase::Rage) ? 0.85f : 0.7f;
+                const float chaseFloor = 0.12f; // siempre audible mientras persigue
+                proxVol = glm::max(chaseFloor, ct * chaseCeil);
+            }
+            else if (lightPresentation == LightPresentation::Admiracion)
             {
                 const float admProxFloor = 0.024f;
                 const float admProxCap   = 0.032f;
@@ -1841,8 +2314,13 @@ int main() {
             backroomsShader->setFloat(base + "quadratic", 0.0055f);
 
             float minDistance = 1e9f;
+            if (Survival_HasLiveMonster())
+            {
+                minDistance = glm::distance(ceilingLights[i].position, Survival_MonsterPosition());
+            }
             for (const Instance& demon : demonInstances)
             {
+                if (Survival_HasLiveMonster()) break;
                 float d = glm::distance(ceilingLights[i].position, demon.position);
                 if (d < minDistance)
                     minDistance = d;
@@ -1908,6 +2386,26 @@ int main() {
                 lightIndex++;
             }
         }
+        // Luz tenue anclada al monstruo vivo durante la persecucion, para que
+        // siga siendo visible aun en apagon total del modo admiracion.
+        if (Survival_HasLiveMonster() && lightIndex < STREAM_MAX_POINT_LIGHTS + 8)
+        {
+            const SurvivalPhase lp = Survival_GetPhase();
+            if (lp == SurvivalPhase::Chase || lp == SurvivalPhase::Rage)
+            {
+                glm::vec3 mp = Survival_MonsterPosition();
+                mp.y += 1.4f;
+                std::string base = "pointLights[" + std::to_string(lightIndex) + "].";
+                backroomsShader->setVec3(base + "position", mp);
+                backroomsShader->setFloat(base + "constant", 1.0f);
+                backroomsShader->setFloat(base + "linear", 0.22f);
+                backroomsShader->setFloat(base + "quadratic", 0.28f);
+                backroomsShader->setVec3(base + "ambient", glm::vec3(0.05f, 0.012f, 0.012f));
+                backroomsShader->setVec3(base + "diffuse", glm::vec3(0.55f, 0.10f, 0.09f));
+                backroomsShader->setVec3(base + "specular", glm::vec3(0.30f, 0.07f, 0.06f));
+                lightIndex++;
+            }
+        }
         backroomsShader->setInt("numActivePointLights", lightIndex);
 
         // Linterna (sigue la camara)
@@ -1943,7 +2441,7 @@ int main() {
 
         float aspect = (SCR_HEIGHT > 0) ? (float)SCR_WIDTH / (float)SCR_HEIGHT : 16.0f / 9.0f;
         glm::mat4 projection = glm::perspective(glm::radians(camera.Zoom), aspect, 0.1f, 200.0f);
-        // View con head-bob
+        // View con head bob
         glm::mat4 view = glm::lookAt(eyePos, eyePos + eyeFront, eyeUp);
         backroomsShader->setMat4("projection", projection);
         backroomsShader->setMat4("view", view);
@@ -1966,7 +2464,21 @@ int main() {
         if (oldPaperBoxesModel)
             drawInstances(*backroomsShader, *oldPaperBoxesModel, boxesInstances, true, STREAM_DRAW_RADIUS);
         if (monsterAlienModel)
-            drawInstances(*backroomsShader, *monsterAlienModel, demonInstances, false, STREAM_DRAW_RADIUS);
+        {
+            if (Survival_HasLiveMonster())
+            {
+                Instance live{};
+                live.position = Survival_MonsterPosition();
+                live.rotationDeg = glm::vec3(0.0f, Survival_MonsterYawDeg(), 0.0f);
+                live.scale = Survival_MonsterScale();
+                std::vector<Instance> one{ live };
+                drawInstances(*backroomsShader, *monsterAlienModel, one, false, STREAM_DRAW_RADIUS);
+            }
+            else
+            {
+                drawInstances(*backroomsShader, *monsterAlienModel, demonInstances, false, STREAM_DRAW_RADIUS);
+            }
+        }
         if (sciFiComputerModel)
             drawInstances(*backroomsShader, *sciFiComputerModel, computerInstances, false, STREAM_DRAW_RADIUS);
         if (publicPhoneBoothModel)
@@ -2003,7 +2515,21 @@ int main() {
             if (oldPaperBoxesModel)
                 drawPlanarShadows(*cubeShader, *oldPaperBoxesModel, boxesInstances, floorY, lightDirection, true, STREAM_SHADOW_RADIUS);
             if (monsterAlienModel)
-                drawPlanarShadows(*cubeShader, *monsterAlienModel, demonInstances, floorY, lightDirection, false, STREAM_SHADOW_RADIUS);
+            {
+                if (Survival_HasLiveMonster())
+                {
+                    Instance live{};
+                    live.position = Survival_MonsterPosition();
+                    live.rotationDeg = glm::vec3(0.0f, Survival_MonsterYawDeg(), 0.0f);
+                    live.scale = Survival_MonsterScale();
+                    std::vector<Instance> one{ live };
+                    drawPlanarShadows(*cubeShader, *monsterAlienModel, one, floorY, lightDirection, false, STREAM_SHADOW_RADIUS);
+                }
+                else
+                {
+                    drawPlanarShadows(*cubeShader, *monsterAlienModel, demonInstances, floorY, lightDirection, false, STREAM_SHADOW_RADIUS);
+                }
+            }
             if (sciFiComputerModel)
                 drawPlanarShadows(*cubeShader, *sciFiComputerModel, computerInstances, floorY, lightDirection, false, STREAM_SHADOW_RADIUS);
             if (publicPhoneBoothModel)
@@ -2017,6 +2543,137 @@ int main() {
         // Fundido de negro al entrar al juego (no se ve frame congelado)
         if (appState == AppState::FadeIn || fadeBlack > 0.001f)
             drawBlackOverlay(fadeBlack);
+
+        // HUD supervivencia: SOLO digitos serif (sin barra, sin panel, sin fase)
+        if (appState == AppState::Playing && Survival_IsCycleActive()
+            && (Survival_GetPhase() == SurvivalPhase::Hunt
+                || Survival_GetPhase() == SurvivalPhase::Chase
+                || Survival_GetPhase() == SurvivalPhase::Rage)
+            && !Survival_TitleCardActive())
+        {
+            const float aspect = (float)std::max(1u, SCR_WIDTH) / (float)std::max(1u, SCR_HEIGHT);
+            const SurvivalPhase ph = Survival_GetPhase();
+            const float secs = Survival_TimerSeconds();
+            char tbuf[16];
+            Survival_FormatTimer(secs, tbuf, sizeof(tbuf));
+
+            // Color: crema muerte; rojo suave en Rage; frio en Chase
+            float tr = 0.96f, tg = 0.93f, tb = 0.86f;
+            if (ph == SurvivalPhase::Chase) { tr = 0.88f; tg = 0.90f; tb = 0.98f; }
+            if (ph == SurvivalPhase::Rage)  { tr = 1.0f;  tg = 0.42f; tb = 0.36f; }
+
+            // Rebake solo si cambia el string/color fase
+            static std::string s_timerSerifKey;
+            static TextBake s_timerSerif{};
+            static SurvivalPhase s_timerPh = SurvivalPhase::Inactive;
+            char keyBuf[48];
+            std::snprintf(keyBuf, sizeof(keyBuf), "%s|%d", tbuf, (int)ph);
+            if (s_timerSerifKey != keyBuf || s_timerSerif.tex == 0)
+            {
+                Text_Free(s_timerSerif);
+                s_timerSerifKey = keyBuf;
+                s_timerPh = ph;
+                const int px = (ph == SurvivalPhase::Rage) ? 92 : 84;
+                // Times New Roman, sin fondo
+                s_timerSerif = Text_Bake(tbuf, px, tr, tg, tb, 0.f, 0.f, 0.f, 0.f, 0, L"Times New Roman");
+            }
+
+            const float cy = 0.88f;
+            float alpha = 0.92f;
+            // Ultimos 10s: pulso de muerte
+            if (secs <= 10.0f)
+                alpha = 0.55f + 0.45f * std::abs(std::sin((float)glfwGetTime() * 4.5f));
+            float halfH = (ph == SurvivalPhase::Rage) ? 0.055f : 0.048f;
+            halfH *= std::clamp(Survival_TimerHudScale(), 1.0f, 1.25f);
+            if (s_timerSerif.tex)
+                Text_DrawCentered(s_timerSerif.tex, s_timerSerif.width, s_timerSerif.height,
+                    0.0f, cy, halfH, aspect, alpha,
+                    splashVAO, splashVBO, splashShader.get());
+
+            // Aviso de despertar (Chase, gracia): cuenta + instrucción de correr.
+            if (Survival_IsChaseGrace())
+            {
+                const int gsec = (int)std::ceil(Survival_ChaseGraceSeconds());
+                char wbuf[64];
+                std::snprintf(wbuf, sizeof(wbuf), "El monstruo se despertará en: %d", gsec);
+                static std::string s_wakeKey;
+                static TextBake s_wakeBake{};
+                if (s_wakeKey != wbuf || s_wakeBake.tex == 0)
+                {
+                    Text_Free(s_wakeBake);
+                    s_wakeKey = wbuf;
+                    s_wakeBake = Text_Bake(wbuf, 54, 1.0f, 0.86f, 0.5f, 0.f, 0.f, 0.f, 0.f, 0, L"Times New Roman");
+                }
+                if (s_wakeBake.tex)
+                    Text_DrawCentered(s_wakeBake.tex, s_wakeBake.width, s_wakeBake.height,
+                        0.0f, 0.06f, 0.045f, aspect, 0.95f,
+                        splashVAO, splashVBO, splashShader.get());
+
+                static TextBake s_runBake{};
+                static bool s_runReady = false;
+                if (!s_runReady)
+                {
+                    s_runBake = Text_Bake("¡Corre si quieres sobrevivir!", 46, 1.0f, 0.3f, 0.26f,
+                        0.f, 0.f, 0.f, 0.f, 0, L"Times New Roman");
+                    s_runReady = true;
+                }
+                const float rp = 0.6f + 0.4f * std::abs(std::sin((float)glfwGetTime() * 4.0f));
+                if (s_runBake.tex)
+                    Text_DrawCentered(s_runBake.tex, s_runBake.width, s_runBake.height,
+                        0.0f, -0.04f, 0.04f, aspect, rp,
+                        splashVAO, splashVBO, splashShader.get());
+            }
+
+            // Prompt flotante 2D anclado al monstruo
+            if (Survival_WantsKillPrompt() && Survival_HasLiveMonster())
+            {
+                const char* prompt = Survival_PromptText();
+                ensureText(s_promptBake, s_promptKey, prompt ? prompt : "Presiona E", 40, 1.0f, 0.92f, 0.35f);
+                glm::vec3 world = Survival_MonsterPosition();
+                world.y = camera.Position.y + 0.35f + 0.08f * std::sin((float)glfwGetTime() * 3.2f);
+                glm::mat4 projection = glm::perspective(glm::radians(camera.Zoom), aspect, 0.1f, 200.0f);
+                glm::mat4 view = camera.GetViewMatrix();
+                glm::vec4 clip = projection * view * glm::vec4(world, 1.0f);
+                if (clip.w > 0.15f)
+                {
+                    float ndcX = clip.x / clip.w;
+                    float ndcY = clip.y / clip.w;
+                    if (ndcX > -1.2f && ndcX < 1.2f && ndcY > -1.2f && ndcY < 1.2f)
+                    {
+                        float bob = 0.02f * std::sin((float)glfwGetTime() * 4.0f);
+                        float flicker = 0.75f + 0.25f * std::abs(std::sin((float)glfwGetTime() * 9.0f));
+                        if (s_promptBake.tex)
+                            Text_DrawCentered(s_promptBake.tex, s_promptBake.width, s_promptBake.height,
+                                ndcX, ndcY + 0.08f + bob, 0.04f, aspect, flicker,
+                                splashVAO, splashVBO, splashShader.get());
+                    }
+                }
+            }
+        }
+
+        // Tarjeta de titulo Chase/Rage (~1s) , PNG HTML/serif de calidad
+        if (appState == AppState::Playing && Survival_TitleCardActive())
+        {
+            const float aspect = (float)std::max(1u, SCR_WIDTH) / (float)std::max(1u, SCR_HEIGHT);
+            const float a = Survival_TitleCardAlpha();
+            const int kind = Survival_TitleCardKind();
+            // Oscurecer mundo
+            drawNdcTexturedQuad(-1.f, -1.f, 1.f, 1.f, barKnobEdgeTex, 0, 0, 1, 1, 0.55f * a);
+            unsigned int card = 0;
+            if (kind == 1) card = titleLucesTex;       // A2
+            else if (kind == 2) card = titleHuyeB1Tex; // B1
+            else if (kind == 3) card = titleHuyeB3Tex; // B3
+            if (card)
+            {
+                // Banner ancho centrado.
+                // loadUiTexture: stbi_flip true + UVs normales (no Text_DrawNdcQuad).
+                const float halfH = 0.26f;
+                const float halfW = halfH * (1600.f / 500.f) / aspect;
+                const float y0 = -halfH * 0.2f;
+                const float y1 = halfH * 0.9f;
+                drawNdcTexturedQuad(-halfW, y0, halfW, y1, card, 0.f, 0.f, 1.f, 1.f, a);
+            }
+        }
 
         glfwSwapBuffers(window);
         glfwPollEvents();
@@ -2040,6 +2697,11 @@ static void startGameFromMenu(GLFWwindow* window)
     AudioBgm_EnterGameAmbient();
     AudioBgm_PhoneRingReset();
     AudioBgm_DistantVoicesReset();
+    Survival_SetCollisionProbe(survivalCorrectMove, &colManager);
+    if (Survival_IsEnabled())
+        survivalRemoveDemonCollisions();
+    Survival_OnEnterPlaying(camera.Position);
+    survivalSyncLights();
     AudioBgm_AmbientBuzzSetActive(lightPresentation == LightPresentation::Normal);
     std::cout << "[UI] COMENZAR -> fundido al juego\n";
 }
@@ -2050,7 +2712,23 @@ static void resumeFromPause(GLFWwindow* window)
     fadeBlack = 0.0f;
     glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
     firstMouse = true;
-    glfwSetWindowTitle(window, "Backrooms - Grupo 7");
+    Survival_SetCollisionProbe(survivalCorrectMove, &colManager);
+    // Si el check esta ON pero el ciclo no arranco (bug legacy / race), forzarlo
+    if (Survival_IsEnabled() && !Survival_IsCycleActive())
+    {
+        survivalRemoveDemonCollisions();
+        Survival_StartCycle(camera.Position);
+        std::cout << "[Survival] CONTINUAR: ciclo Hunt arrancado (estaba Inactive)\n";
+    }
+    else if (Survival_IsEnabled())
+    {
+        survivalRemoveDemonCollisions();
+    }
+    survivalSyncLights();
+    if (Survival_IsEnabled() && Survival_IsCycleActive())
+        glfwSetWindowTitle(window, (std::string("Backrooms | ") + Survival_WindowStatus()).c_str());
+    else
+        glfwSetWindowTitle(window, "Backrooms - Grupo 7");
     std::cout << "[UI] CONTINUAR\n";
 }
 
@@ -2075,34 +2753,69 @@ void processInput(GLFWwindow* window)
         return;
     }
 
+    // Ending cinematica
+    if (appState == AppState::Ending)
+    {
+        if ((enterDown && !enterWasDown) || (escDown && !escWasDown))
+        {
+            if (Survival_TryAdvanceCinematicConfirm() || Survival_CinematicDone())
+            {
+                Survival_StopCycle();
+                appState = AppState::Menu;
+                glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+                firstMouse = true;
+                AudioBgm_EnterMenuLoop();
+                lightPresentation = LightPresentation::Normal;
+                applyLightPresentation();
+                glfwSetWindowTitle(window, "Backrooms - Grupo 7");
+            }
+        }
+        escWasDown = escDown;
+        enterWasDown = enterDown;
+        return;
+    }
+
+    // Jumpscare: sin control
+    if (appState == AppState::Jumpscare)
+    {
+        escWasDown = escDown;
+        enterWasDown = enterDown;
+        return;
+    }
+
     // pausa
     if (appState == AppState::Paused)
     {
         static bool rWasDown = false;
         static bool lWasDown = false;
         static bool mWasDown = false;
+        static bool gWasDown = false;
         const bool rDown = glfwGetKey(window, GLFW_KEY_R) == GLFW_PRESS;
         const bool lDown = glfwGetKey(window, GLFW_KEY_L) == GLFW_PRESS;
         const bool mDown = glfwGetKey(window, GLFW_KEY_M) == GLFW_PRESS;
+        const bool gDown = glfwGetKey(window, GLFW_KEY_G) == GLFW_PRESS;
         if (enterDown && !enterWasDown)
             resumeFromPause(window);
         if (escDown && !escWasDown)
-            resumeFromPause(window); // Esc en pausa = continuar (tambien se puede salir con boton)
+            resumeFromPause(window); // Esc en pausa es continuar (tambien se puede salir con boton)
         if (rDown && !rWasDown)
-            restartApplicationFast(); // R = recarga rapida del proceso
+            restartApplicationFast(); // R es recarga rapida del proceso
         if (lDown && !lWasDown)
-            toggleLightsBlackoutMode(); // L = APAGAR / ENCENDER LUCES
+            toggleLightsBlackoutMode(); // L es APAGAR / ENCENDER LUCES
         if (mDown && !mWasDown)
-            toggleAdmiracionMode(); // M = MODO ADMIRACION
+            toggleAdmiracionMode(); // M es MODO ADMIRACION
+        if (gDown && !gWasDown)
+            survivalToggleFromUi(camera.Position); // G es check supervivencia
         rWasDown = rDown;
         lWasDown = lDown;
         mWasDown = mDown;
+        gWasDown = gDown;
         escWasDown = escDown;
         enterWasDown = enterDown;
         return;
     }
 
-    // fade-in + playing: se puede caminar en cuanto empieza el fundido
+    // fade in + playing: se puede caminar en cuanto empieza el fundido
     // (el fade es visual; el jugador no se queda "congelado" esperando)
     if (appState == AppState::FadeIn || appState == AppState::Playing)
     {
@@ -2127,10 +2840,12 @@ void processInput(GLFWwindow* window)
             escWasDown = escDown;
         enterWasDown = enterDown;
 
-        const bool wantW = glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS;
-        const bool wantS = glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS;
-        const bool wantA = glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS;
-        const bool wantD = glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS;
+        // Congelar movimiento durante titulo Chase/Rage (~1s)
+        const bool freezeForTitle = Survival_TitleCardActive();
+        const bool wantW = !freezeForTitle && glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS;
+        const bool wantS = !freezeForTitle && glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS;
+        const bool wantA = !freezeForTitle && glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS;
+        const bool wantD = !freezeForTitle && glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS;
         // Sprint: Ctrl + W
         const bool wantCtrl =
             glfwGetKey(window, GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS ||
@@ -2197,7 +2912,7 @@ void processInput(GLFWwindow* window)
             if (admShake)
             {
                 const float t = static_cast<float>(glfwGetTime());
-                // Micro-shake
+                // Micro shake
                 const float shake =
                     std::sin(t * 31.0f) * 0.42f +
                     std::sin(t * 47.0f) * 0.33f +
@@ -2244,14 +2959,37 @@ void processInput(GLFWwindow* window)
         }
 
         static bool fKeyWasPressed = false;
+        static bool eKeyWasPressed = false;
         if (appState == AppState::Playing)
         {
+            // HUD titulo supervivencia
+            if (Survival_IsEnabled() && Survival_IsCycleActive())
+            {
+                char t[200];
+                std::snprintf(t, sizeof(t), "Backrooms | %s", Survival_WindowStatus());
+                glfwSetWindowTitle(window, t);
+            }
+
+            // Hunt cerca monstruo: E es matar
+            if (glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS)
+            {
+                if (!eKeyWasPressed)
+                {
+                    Survival_ConsumeKillInteract();
+                    eKeyWasPressed = true;
+                }
+            }
+            else if (glfwGetKey(window, GLFW_KEY_E) == GLFW_RELEASE)
+            {
+                eKeyWasPressed = false;
+            }
+
+            // F es solo linterna
             if (glfwGetKey(window, GLFW_KEY_F) == GLFW_PRESS)
             {
                 if (!fKeyWasPressed)
                 {
                     flashlightOn = !flashlightOn;
-                    // Mismo click FNAF al prender y al apagar
                     AudioBgm_PlaySfx("sounds/flashlight.mp3", 0.9f);
                     fKeyWasPressed = true;
                 }
@@ -2260,6 +2998,35 @@ void processInput(GLFWwindow* window)
             {
                 fKeyWasPressed = false;
             }
+
+            // DEBUG PREVIEW (quitar en el futuro)
+            // Fuerza jumpscare/finales sin jugar el ciclo. Ver game_survival.h.
+#if SURVIVAL_DEBUG_PREVIEW
+            {
+                static const int kDbgN = 6;
+                static bool dbgWas[kDbgN] = { false, false, false, false, false, false };
+                const int dbgKeys[kDbgN] = {
+                    GLFW_KEY_F4, GLFW_KEY_F5, GLFW_KEY_F6,
+                    GLFW_KEY_F7, GLFW_KEY_F8, GLFW_KEY_F9
+                };
+                const SurvivalPhase dbgPhase[kDbgN] = {
+                    SurvivalPhase::Chase,         // F4 es CHASE ("Luces Apagadas" + gracia 5s)
+                    SurvivalPhase::Rage,          // F5 es RAGE ("¡Huye!" + persecución ya despierta)
+                    SurvivalPhase::EndingKill,    // F6 es VICTORIA (mataste)
+                    SurvivalPhase::EndingEscape,  // F7 es ESCAPASTE
+                    SurvivalPhase::EndingLose,    // F8 es PERDISTE
+                    SurvivalPhase::Jumpscare      // F9 es JUMPSCARE
+                };
+                for (int i = 0; i < kDbgN; ++i)
+                {
+                    const bool down = glfwGetKey(window, dbgKeys[i]) == GLFW_PRESS;
+                    if (down && !dbgWas[i])
+                        Survival_DebugForcePhase(dbgPhase[i], camera.Position);
+                    dbgWas[i] = down;
+                }
+            }
+#endif
+            // FIN DEBUG PREVIEW
         }
         return;
     }
@@ -2273,8 +3040,6 @@ void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
     (void)mods;
     if (button != GLFW_MOUSE_BUTTON_LEFT || action != GLFW_PRESS)
         return;
-    if (appState != AppState::Menu && appState != AppState::Paused)
-        return;
 
     double mx = 0.0, my = 0.0;
     glfwGetCursorPos(window, &mx, &my);
@@ -2287,6 +3052,25 @@ void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
         mx = mx * (double)fbW / (double)winW;
         my = my * (double)fbH / (double)winH;
     }
+
+    if (appState == AppState::Ending)
+    {
+        if (Survival_CinematicDone() || Survival_TryAdvanceCinematicConfirm())
+        {
+            Survival_StopCycle();
+            appState = AppState::Menu;
+            glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+            firstMouse = true;
+            AudioBgm_EnterMenuLoop();
+            lightPresentation = LightPresentation::Normal;
+            applyLightPresentation();
+            glfwSetWindowTitle(window, "Backrooms - Grupo 7");
+        }
+        return;
+    }
+
+    if (appState != AppState::Menu && appState != AppState::Paused)
+        return;
 
     if (uiHitPrimaryButton(mx, my))
     {
@@ -2313,6 +3097,11 @@ void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
     else if (appState == AppState::Paused && uiHitQuaternaryButton(mx, my))
     {
         glfwSetWindowShouldClose(window, true); // SALIR
+    }
+    else if (appState == AppState::Paused
+        && Survival_HitCheckbox(mx, my, SCR_WIDTH, SCR_HEIGHT))
+    {
+        survivalToggleFromUi(camera.Position);
     }
 }
 

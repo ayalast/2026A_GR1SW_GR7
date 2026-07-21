@@ -1,7 +1,7 @@
 #pragma once
 
 // UI de menus (inicio / pausa) y reinicio rapido de la app.
-// Coords normalizadas 0..1 (arriba = 0). Layout: tools/_gen_pause_menu.py
+// Coords normalizadas 0..1 (arriba es 0). Layout: tools/_gen_pause_menu.py
 
 // Estados de la aplicacion (compartidos con main)
 enum class AppState
@@ -9,7 +9,9 @@ enum class AppState
     Menu,
     FadeIn,
     Playing,
-    Paused
+    Paused,
+    Jumpscare,
+    Ending
 };
 
 // Definidos en main.cpp
